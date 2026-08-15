@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NodeProps } from '@xyflow/react';
 import { MemoModel } from '@/types/erd';
 import { Trash2 } from 'lucide-react';
@@ -24,6 +24,14 @@ const COLOR_KEYS = ['#fef08a', '#fed7aa', '#bbf7d0', '#bfdbfe', '#fbcfe8'];
 export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
   const { memo, onUpdate, onDelete } = data as unknown as MemoNodeData;
   const [content, setContent] = useState(memo?.content || '');
+  const isFocusedRef = useRef(false);
+
+  // 원격 사용자의 실시간 메모 내용 변경 동기화 (내가 편집 중이 아닐 때만 적용하여 한글 IME 조합 보호)
+  useEffect(() => {
+    if (!isFocusedRef.current && memo?.content !== undefined) {
+      setContent(memo.content);
+    }
+  }, [memo?.content]);
 
   const colorKey = memo?.color && MEMO_THEMES[memo.color] ? memo.color : '#fef08a';
   const theme = MEMO_THEMES[colorKey];
@@ -59,9 +67,18 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
 
       <textarea
         value={content}
+        onFocus={() => {
+          isFocusedRef.current = true;
+        }}
+        onBlur={() => {
+          isFocusedRef.current = false;
+          // 포커스 아웃 시 최종 내용 확정 동기화
+          onUpdate(memo.id, { content });
+        }}
         onChange={(e) => {
-          setContent(e.target.value);
-          onUpdate(memo.id, { content: e.target.value });
+          const val = e.target.value;
+          setContent(val);
+          onUpdate(memo.id, { content: val });
         }}
         placeholder="메모를 입력하세요..."
         style={{ color: theme.text }}

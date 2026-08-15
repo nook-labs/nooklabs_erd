@@ -41,6 +41,7 @@ import {
 } from '@/collaboration/actions';
 import { RelationshipModal } from './RelationshipModal';
 import { CreateRelationshipModal } from './CreateRelationshipModal';
+import { MultiplayerCursors } from './MultiplayerCursors';
 
 interface ERDCanvasProps {
   manager: ERDDocManager;
@@ -358,8 +359,29 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   const parentTable = editingRelationship ? tables[editingRelationship.parentTableId] : null;
   const childTable = editingRelationship ? tables[editingRelationship.childTableId] : null;
 
+  const handlePointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!manager?.provider?.awareness || !reactFlowInstanceRef?.current) return;
+      const flowPos = reactFlowInstanceRef.current.screenToFlowPosition({
+        x: e.clientX,
+        y: e.clientY,
+      });
+      manager.provider.awareness.setLocalStateField('cursor', flowPos);
+    },
+    [manager, reactFlowInstanceRef]
+  );
+
+  const handlePointerLeave = useCallback(() => {
+    if (!manager?.provider?.awareness) return;
+    manager.provider.awareness.setLocalStateField('cursor', null);
+  }, [manager]);
+
   return (
-    <div className="w-full h-full bg-[#07090e] relative overflow-hidden">
+    <div
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+      className="w-full h-full bg-[#07090e] relative overflow-hidden"
+    >
       {/* Floating Relationship Mode Pill Banner */}
       {activeTool.startsWith('rel-') && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-[#0d111a]/95 border border-indigo-500/80 text-white px-4 py-2 rounded-full shadow-[0_10px_30px_rgba(79,70,229,0.3)] backdrop-blur-xl flex items-center gap-3 text-xs">
@@ -397,14 +419,16 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           if (reactFlowInstanceRef) {
             reactFlowInstanceRef.current = instance;
           }
+          instance.fitView({ padding: 0.2 });
         }}
-        fitView
         colorMode="dark"
         minZoom={0.2}
         maxZoom={2.5}
         defaultEdgeOptions={{ type: 'relationshipEdge' }}
       >
         <Background color="#131926" gap={24} size={1} />
+        {/* Figma-Style Live Multiplayer Cursors */}
+        <MultiplayerCursors manager={manager} />
         {isMiniMapOpen && (
           <MiniMap
             nodeColor={(n) => (n.type === 'memoNode' ? '#fef08a' : '#4f46e5')}

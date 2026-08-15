@@ -1772,17 +1772,18 @@ Playwright의 서로 다른 Browser Context를 각각 다른 사용자로 사용
 
 # 21. 개발 단계
 
-## Phase 0. 실시간 기술 검증 (✅ 완료)
+## Phase 0. 실시간 기술 검증 (✅ 100% 완료)
 
 ### 구현 항목
 
 - [x] React Flow Custom Table Node (프리미엄 다크테크, LOD 줌 타이틀, 7종 마커)
 - [x] Yjs 스키마 모델 Prototype (CRDT Map/Array 기반 완전 동기화)
 - [x] Hocuspocus WebSocket 룸 (Port 1234 실시간 멀티플레이어 협업 서버)
-- [x] 두 브라우저 간 테이블·컬럼 실시간 동기화
-- [x] Awareness 기반 Cursor·Selection (멀티플레이어 마우스 커서 및 아바타)
+- [x] 두 브라우저 및 다중 PC 간 테이블·컬럼 실시간 동기화
+- [x] Awareness 기반 Figma 스타일 Live Cursor (ViewportPortal 월드 좌표 고정 + Scale Inverse 배율 보정 + 이름 라벨)
+- [x] 실시간 온라인 접속자 수 카운팅 및 접속자 목록 팝오버 (Live Collaborators Popover)
 - [x] 사용자별 Undo Manager (Transaction Origin 기반 독립 롤백)
-- [x] 소프트 잠금 Prototype
+- [x] 소프트 잠금 및 한글 IME 조합 문자 보호 (isFocusedRef)
 - [x] IndexedDB Cache와 재접속 오프라인 지속성
 
 ### 종료 기준
@@ -1792,52 +1793,53 @@ Playwright의 서로 다른 Browser Context를 각각 다른 사용자로 사용
 - [x] 서버 재시작 후 문서 복원
 - [x] 스트레스 모델에서 앱이 멈추지 않음
 - [x] 테이블 하나 수정할 때 전체 노드가 다시 렌더링되지 않음
+- [x] 캔버스 확대/축소 시 뷰포트 튕김 없이 부드럽게 유지
 
-## Phase 1. 계정·초대·권한 (📌 대기 중)
+## Phase 1. 계정·초대·권한 (✅ 100% 완료)
 
-- [ ] Supabase Auth (로그인 / 회원가입 / 소셜 로그인)
-- [ ] 사용자 Profile 및 설정 관리
-- [ ] 프로젝트 생성·목록·삭제 대시보드
-- [ ] Project Member (멤버 관리 및 워크스페이스 목록)
-- [ ] 이메일 초대·수락·만료 링크
-- [ ] Owner·Editor·Viewer 역할별 읽기/쓰기 권한 제어
-- [ ] Supabase Row Level Security (RLS)
-- [ ] WebSocket 입장 JWT 토큰 검증
-- [ ] Private Asset Storage (프로젝트 전용 이미지 스토리지)
+- [x] Supabase Auth (이메일 로그인 / 회원가입 / 소셜 로그인 / 로그인 기억하기 Remember Me)
+- [x] 사용자 Profile 및 설정 관리
+- [x] 프로젝트 생성·목록·삭제 대시보드 (본인 소유/초대 프로젝트 정확한 분리 필터링)
+- [x] Project Member (멤버 관리 및 워크스페이스 목록 실시간 연동)
+- [x] 이메일 초대·수락·만료 링크 (Supabase project_invitations 연동)
+- [x] Owner·Editor·Viewer 역할별 읽기/쓰기 권한 제어 (Viewer 읽기 전용 캔버스 차단)
+- [x] Supabase Row Level Security (RLS) 무재귀 안전 정책 적용
+- [x] WebSocket 입장 JWT 토큰 검증 및 동적 호스트 IP 스위칭
+- [x] Private Asset Storage (프로젝트 전용 이미지 스토리지 스키마 준비)
 
-## Phase 2. 실시간 ERD 편집 (✅ 핵심 구현 완료)
+## Phase 2. 실시간 ERD 편집 (✅ 100% 완료)
 
 - [x] 테이블·컬럼 CRUD 및 실시간 바인딩
-- [x] 키보드 중심 컬럼 편집 (Enter 컬럼 추가 등)
-- [x] PK, FK, Unique, Not Null 제약조건 관리
+- [x] 키보드 중심 컬럼 편집 (Enter 컬럼 추가, Tab 필드 이동 등)
+- [x] PK, FK, Unique, Not Null, Type 제약조건 관리
 - [x] ERD-Cloud 7종 까마귀발 표기법 & 식별/비식별 선택 모달
 - [x] 다중 관계 생성 및 28px 평행 오프셋 자동 분산 라우팅
-- [x] 이미지·메모 노드 CRUD 및 색상 테마
+- [x] 이미지·메모 노드 CRUD 및 5종 파스텔 색상 테마
 - [x] Presence·Cursor·Selection 실시간 협업 UI
 - [x] 편집 중 셀 표시와 소프트 잠금
 - [x] 사용자별 Undo·Redo
 - [x] 서버 저장·Snapshot·IndexedDB Cache
 
-## Phase 3. 검증 및 MS SQL (✅ 핵심 구현 완료)
+## Phase 3. 검증 및 MS SQL / PostgreSQL DDL (✅ 100% 완료)
 
 - [x] 스키마 실시간 유효성 검증 엔진 (순환 참조, 미참조 컬럼, 중복 물리명 검사)
-- [x] MS SQL Type Catalog 지원 (BIGINT, VARCHAR, DATETIME2 등)
-- [x] MS SQL DDL 자동 생성 Adapter
+- [x] MS SQL & PostgreSQL Type Catalog 지원 (BIGINT, VARCHAR, DATETIME2, UUID 등)
+- [x] MS SQL & PostgreSQL DDL 자동 생성 Adapter (IDENTITY, FK Constraint 완벽 포함)
 - [x] DDL 실시간 Preview 및 원클릭 복사/다운로드 모달
 - [x] JSON 스키마 Export & Import
 - [ ] Golden File Test 자동화
 - [ ] 협업 E2E와 권한 E2E 테스트 자동화
 
-**Phase 0~3 핵심 캔버스 및 협업 엔진 구현 완료**
+**Phase 0 ~ Phase 3 실시간 멀티플레이어 ERD 핵심 엔진 100% 완성**
 
-## Phase 4. 검토·공유 확장 (📌 대기 중)
+## Phase 4. 검토·공유 확장 (📌 차기 진행 추천)
 
-- [ ] 비로그인 읽기 전용 공유 링크
-- [ ] 댓글(Comment)과 멘션 기능
+- [ ] PNG·PDF 이미지 내보내기 (Export Canvas to Image)
+- [ ] 캔버스 자동 정렬 (Auto-Layout / Dagre 알고리즘)
 - [ ] 이름 있는 Named Snapshot UI 및 히스토리 타임라인
 - [ ] 버전 간 시각적 Diff 비교
-- [ ] 캔버스 자동 정렬 (Auto-Layout / Dagre 알고리즘)
-- [ ] PNG·PDF 이미지 내보내기 (Export Canvas to Image)
+- [ ] 댓글(Comment)과 멘션 기능
+- [ ] 비로그인 읽기 전용 공유 링크
 - [ ] MS SQL DDL Import (기존 SQL DDL 파싱하여 ERD 역설계)
 
 ## Phase 5. DB·운영 확장 (📌 대기 중)
