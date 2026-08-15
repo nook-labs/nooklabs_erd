@@ -31,7 +31,12 @@
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "lightningcss": "^1.29.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "optionalDependencies": {
+    "lightningcss-linux-x64-gnu": "1.29.1",
+    "lightningcss-linux-x64-musl": "1.29.1"
   }
 }
