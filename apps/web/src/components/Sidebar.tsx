@@ -140,7 +140,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <button
         onClick={onAddTable}
         className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-        title="테이블 추가 (T)"
+        title="테이블 추가 (Shift + T)"
       >
         <Table2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
       </button>
@@ -149,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <button
         onClick={onAddMemo}
         className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-        title="메모 추가 (M)"
+        title="메모 추가 (Shift + M)"
       >
         <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
       </button>

@@ -51,6 +51,8 @@ export interface ColumnModel {
   isFk?: boolean;
   isUnique?: boolean;
   autoIncrement?: boolean;
+  domain?: string;
+  domainId?: string;
   defaultExpression?: string;
   identity?: IdentitySpec;
   comment?: string;
@@ -114,8 +116,9 @@ export interface NodeView {
 
 export interface DomainItem {
   id: string;
-  name: string; // e.g. '이메일', '전화번호', '화폐금액', '설명글'
-  dataType: string; // e.g. 'VARCHAR(255)', 'VARCHAR(20)', 'DECIMAL(18,2)', 'TEXT'
+  name: string; // e.g. '이메일', '전화번호', 'h12, h24'
+  dataType: string; // e.g. 'VARCHAR(255)', 'enum', 'timestamptz'
+  defaultValue?: string; // e.g. 'h24', 'now()', 'false'
 }
 
 export interface SchemaModel {

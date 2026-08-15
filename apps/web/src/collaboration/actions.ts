@@ -22,6 +22,8 @@ export function createDefaultColumn(index: number = 1): ColumnModel {
     isPk: index === 1,
     isFk: false,
     autoIncrement: index === 1,
+    domain: '',
+    defaultExpression: '',
     comment: '',
     origin: 'user',
   };
@@ -409,6 +411,9 @@ export function updateMemoAction(
   const updated: MemoModel = {
     ...current,
     ...updates,
+    position: updates.position
+      ? { ...current.position, ...updates.position }
+      : current.position,
   };
 
   manager.doc.transact(() => {
@@ -452,9 +457,95 @@ export function updateNodePositionAction(
   }, manager.doc.clientID);
 }
 
+// Domain Actions
+export function addDomainAction(
+  manager: ERDDocManager,
+  name: string,
+  dataType: string,
+  defaultValue?: string
+): string {
+  const domainId = `dom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  const item: DomainItem = {
+    id: domainId,
+    name,
+    dataType,
+    defaultValue: defaultValue || '',
+  };
+  manager.doc.transact(() => {
+    manager.domainsMap.set(domainId, item);
+  }, manager.doc.clientID);
+  return domainId;
+}
+
+export function updateDomainAction(
+  manager: ERDDocManager,
+  domainId: string,
+  updates: Partial<DomainItem>
+) {
+  const current = manager.domainsMap.get(domainId);
+  if (!current) return;
+  const updated: DomainItem = { ...current, ...updates };
+  manager.doc.transact(() => {
+    manager.domainsMap.set(domainId, updated);
+  }, manager.doc.clientID);
+}
+
+export function deleteDomainAction(manager: ERDDocManager, domainId: string) {
+  manager.doc.transact(() => {
+    manager.domainsMap.delete(domainId);
+  }, manager.doc.clientID);
+}
+
+/**
+ * Cascade Sync: 해당 도메인을 사용하고 있는 전체 테이블의 모든 컬럼을 최신 타입/기본값으로 일괄 동기화
+ */
+export function syncDomainColumnsAction(
+  manager: ERDDocManager,
+  domain: DomainItem
+): number {
+  let updatedCount = 0;
+  const dtVal = domain.dataType.trim();
+  const match = dtVal.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
+  const nextType = match
+    ? { name: match[1], length: match[2] ? parseInt(match[2], 10) : undefined }
+    : { name: dtVal };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.forEach((table, tableId) => {
+      let tableModified = false;
+      const updatedCols = { ...table.columnsById };
+
+      table.columnOrder.forEach((colId) => {
+        const col = updatedCols[colId];
+        if (col && (col.domainId === domain.id || col.domain === domain.name)) {
+          updatedCols[colId] = {
+            ...col,
+            domainId: domain.id,
+            domain: domain.name,
+            type: nextType,
+            defaultExpression: domain.defaultValue !== undefined ? domain.defaultValue : col.defaultExpression,
+          };
+          tableModified = true;
+          updatedCount++;
+        }
+      });
+
+      if (tableModified) {
+        manager.tablesMap.set(tableId, {
+          ...table,
+          columnsById: updatedCols,
+        });
+      }
+    });
+  }, manager.doc.clientID);
+
+  return updatedCount;
+}
+
 // Meta actions
 export function updateProjectTitleAction(manager: ERDDocManager, title: string) {
   manager.doc.transact(() => {
     manager.metaMap.set('title', title);
   }, manager.doc.clientID);
 }
+

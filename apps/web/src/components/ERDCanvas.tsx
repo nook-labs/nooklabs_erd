@@ -23,6 +23,7 @@ import {
   DisplayMode,
   ActiveTool,
   MemoModel,
+  DomainItem,
 } from '@/types/erd';
 import { ERDDocManager } from '@/collaboration/doc';
 import { TableNode } from './TableNode';
@@ -53,6 +54,7 @@ interface ERDCanvasProps {
   relationships: Record<string, RelationshipModel>;
   nodes: Record<string, NodeView>;
   memos: Record<string, MemoModel>;
+  domains?: DomainItem[];
   displayMode: DisplayMode;
   activeTool: ActiveTool;
   setActiveTool: (tool: ActiveTool) => void;
@@ -77,6 +79,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   relationships,
   nodes,
   memos,
+  domains = [],
   displayMode,
   activeTool,
   setActiveTool,
@@ -116,6 +119,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         data: {
           table,
           displayMode,
+          domains,
           zoomLabelScale: canvasSettings.zoomLabelScale ?? 1.45,
           isSourceCandidate,
           isTargetCandidate,
@@ -324,8 +328,14 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
       manager.doc.transact(() => {
         targets.forEach((n) => {
           if (n.type === 'memoNode') {
+            const currentMemo = manager.memosMap.get(n.id);
             updateMemoAction(manager, n.id, {
-              position: { x: n.position.x, y: n.position.y },
+              position: {
+                x: n.position.x,
+                y: n.position.y,
+                width: currentMemo?.position.width,
+                height: currentMemo?.position.height,
+              },
             });
           } else {
             updateNodePositionAction(manager, n.id, n.position.x, n.position.y);
@@ -388,6 +398,39 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     [manager, reactFlowInstanceRef]
   );
 
+  // Real-time Spacebar Pan Cursor Detection
+  const [isSpaceDown, setIsSpaceDown] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
+        return;
+      }
+      if (e.code === 'Space' && !e.repeat) {
+        setIsSpaceDown(true);
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        setIsSpaceDown(false);
+      }
+    };
+
+    const handleWindowBlur = () => {
+      setIsSpaceDown(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleWindowWindowBlur => handleWindowBlur());
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleWindowBlur);
+    };
+  }, []);
+
   const handlePointerLeave = useCallback(() => {
     if (!manager?.provider?.awareness) return;
     manager.provider.awareness.setLocalStateField('cursor', null);
@@ -424,7 +467,9 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
       style={{ backgroundColor: canvasSettings.backgroundColor }}
-      className="w-full h-full relative overflow-hidden transition-colors duration-200"
+      className={`w-full h-full relative overflow-hidden transition-colors duration-200 ${
+        isSpaceDown ? 'is-space-panning' : ''
+      }`}
     >
       {/* Floating Relationship Mode Banner */}
       {activeTool.startsWith('rel-') && (

@@ -42,12 +42,37 @@
 }
 
 /* React Flow Figma Styling Overrides */
-.react-flow {
-  background-color: transparent !important;
-}
-
+/* Figma Signature Arrow Cursor for Canvas Pane */
 .react-flow__pane {
   background-color: transparent !important;
+  cursor: url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M4.5 3.5L18.5 14.2L12.2 15.2L9.5 21L4.5 3.5Z' fill='%2318181b' stroke='white' stroke-width='1.6' stroke-linejoin='round'/%3E%3C/svg%3E") 4 3, default !important;
+}
+
+.react-flow__pane.dragging {
+  cursor: grabbing !important;
+}
+
+/* When spacebar / panning is active (Instant visual feedback on keydown) */
+.is-space-panning,
+.is-space-panning .react-flow__pane,
+.is-space-panning .react-flow__node {
+  cursor: grab !important;
+}
+
+.is-space-panning:active,
+.is-space-panning:active .react-flow__pane,
+.is-space-panning:active .react-flow__node {
+  cursor: grabbing !important;
+}
+
+.react-flow.panning .react-flow__pane,
+.react-flow.panning {
+  cursor: grab !important;
+}
+
+.react-flow.panning:active .react-flow__pane,
+.react-flow.panning:active {
+  cursor: grabbing !important;
 }
 
 .react-flow__viewport {

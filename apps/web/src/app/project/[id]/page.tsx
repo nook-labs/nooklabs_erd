@@ -31,6 +31,10 @@ import {
   addRelationshipAction,
   updateProjectTitleAction,
   updateNodePositionAction,
+  addDomainAction,
+  updateDomainAction,
+  deleteDomainAction,
+  syncDomainColumnsAction,
 } from '@/collaboration/actions';
 import { validateSchema, ValidationIssue } from '@/validation/validator';
 import { Database } from 'lucide-react';
@@ -316,12 +320,17 @@ export default function ProjectEditorPage() {
   }, [manager, tables, isReadOnly]);
 
   const handleAddDomain = useCallback(
-    (name: string, dataType: string) => {
+    (name: string, dataType: string, defaultValue?: string) => {
       if (!manager || isReadOnly) return;
-      const id = `dom_${Date.now()}`;
-      manager.doc.transact(() => {
-        manager.domainsMap.set(id, { id, name, dataType });
-      }, manager.doc.clientID);
+      addDomainAction(manager, name, dataType, defaultValue);
+    },
+    [manager, isReadOnly]
+  );
+
+  const handleUpdateDomain = useCallback(
+    (id: string, updates: Partial<DomainItem>) => {
+      if (!manager || isReadOnly) return;
+      updateDomainAction(manager, id, updates);
     },
     [manager, isReadOnly]
   );
@@ -329,9 +338,15 @@ export default function ProjectEditorPage() {
   const handleDeleteDomain = useCallback(
     (id: string) => {
       if (!manager || isReadOnly) return;
-      manager.doc.transact(() => {
-        manager.domainsMap.delete(id);
-      }, manager.doc.clientID);
+      deleteDomainAction(manager, id);
+    },
+    [manager, isReadOnly]
+  );
+
+  const handleSyncDomain = useCallback(
+    (domain: DomainItem): number => {
+      if (!manager || isReadOnly) return 0;
+      return syncDomainColumnsAction(manager, domain);
     },
     [manager, isReadOnly]
   );
@@ -345,7 +360,7 @@ export default function ProjectEditorPage() {
     [manager, isReadOnly]
   );
 
-  // Keyboard Shortcuts
+  // Keyboard Shortcuts (Improved: Shift+T for safe table creation to prevent misclicks)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
@@ -354,9 +369,11 @@ export default function ProjectEditorPage() {
 
       if (e.key === 'v' || e.key === 'V') {
         setActiveTool('select');
-      } else if ((e.key === 't' || e.key === 'T') && !isReadOnly) {
+      } else if (e.shiftKey && (e.key === 't' || e.key === 'T') && !isReadOnly) {
+        e.preventDefault();
         handleAddTable();
-      } else if ((e.key === 'm' || e.key === 'M') && !isReadOnly) {
+      } else if (e.shiftKey && (e.key === 'm' || e.key === 'M') && !isReadOnly) {
+        e.preventDefault();
         handleAddMemo();
       } else if (e.key === 'Escape') {
         setActiveTool('select');
@@ -429,6 +446,7 @@ export default function ProjectEditorPage() {
             relationships={relationships}
             nodes={nodes}
             memos={memos}
+            domains={domains}
             displayMode={displayMode}
             activeTool={activeTool}
             setActiveTool={setActiveTool}
@@ -493,7 +511,9 @@ export default function ProjectEditorPage() {
         onClose={() => setIsDomainOpen(false)}
         domains={domains}
         onAddDomain={handleAddDomain}
+        onUpdateDomain={handleUpdateDomain}
         onDeleteDomain={handleDeleteDomain}
+        onSyncDomain={handleSyncDomain}
       />
 
       {/* Share / Member Modal */}
