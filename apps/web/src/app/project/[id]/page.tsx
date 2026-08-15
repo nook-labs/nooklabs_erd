@@ -24,6 +24,7 @@ import { ExportModal } from '@/components/ExportModal';
 import { DomainModal } from '@/components/DomainModal';
 import { ValidationPanel } from '@/components/ValidationPanel';
 import { ShareModal } from '@/components/ShareModal';
+import { CanvasInspector, CanvasSettings } from '@/components/CanvasInspector';
 import {
   addTableAction,
   addMemoAction,
@@ -52,13 +53,24 @@ export default function ProjectEditorPage() {
   const [onlineUsers, setOnlineUsers] = useState<OnlineUserInfo[]>([]);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('physical');
 
+  // Canvas Inspector & Background Settings
+  const [isInspectorOpen, setIsInspectorOpen] = useState(false);
+  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>({
+    backgroundColor: '#1e1e1e', // Figma Dark Default
+    gridType: 'dots',
+    gridColor: 'rgba(255, 255, 255, 0.12)',
+    zoomLabelScale: 1.45,
+    showZoomLabels: true,
+  });
+
+
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [isIdentifyingMode, setIsIdentifyingMode] = useState<boolean>(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isDomainOpen, setIsDomainOpen] = useState(false);
   const [isValidationOpen, setIsValidationOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [isMiniMapOpen, setIsMiniMapOpen] = useState(true);
+  const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
 
   const reactFlowInstanceRef = useRef<any>(null);
 
@@ -161,6 +173,19 @@ export default function ProjectEditorPage() {
 
       const title = docMgr.metaMap.get('title');
       if (title) setProjectTitle(title);
+
+      const savedBg = docMgr.metaMap.get('canvasBg');
+      const savedGrid = docMgr.metaMap.get('canvasGrid');
+      const savedZoomScale = docMgr.metaMap.get('canvasZoomScale');
+      if (savedBg || savedGrid || savedZoomScale !== undefined) {
+        setCanvasSettings((prev) => ({
+          ...prev,
+          backgroundColor: savedBg || prev.backgroundColor,
+          gridType: (savedGrid as any) || prev.gridType,
+          zoomLabelScale: typeof savedZoomScale === 'number' ? savedZoomScale : prev.zoomLabelScale,
+        }));
+      }
+
     };
 
     docMgr.doc.on('update', syncFromYjs);
@@ -194,12 +219,12 @@ export default function ProjectEditorPage() {
     // Initial seed check after IndexedDB sync (avoid duplicated creation)
     const seedTimeout = setTimeout(() => {
       if (docMgr.tablesMap.size === 0 && myRole !== 'viewer') {
-        const userTblId = addTableAction(docMgr, '회원', 'users', 120, 140, '#4f46e5');
-        const orderTblId = addTableAction(docMgr, '주문', 'orders', 540, 140, '#0d9488');
+        const userTblId = addTableAction(docMgr, '회원', 'users', 120, 140, '#0c8ce9');
+        const orderTblId = addTableAction(docMgr, '주문', 'orders', 540, 140, '#10b981');
         addRelationshipAction(docMgr, userTblId, orderTblId, 'non-identifying', 'one-to-many');
         addMemoAction(
           docMgr,
-          '📌 ERD Cloud에 오신 것을 환영합니다!\n좌측 툴바에서 1:N 관계 도구를 선택하여\n테이블 간 관계를 쉽게 연결할 수 있습니다.',
+          '📌 NookLabs ERD Studio\n좌측 툴바에서 1:N 관계 도구를 선택하여\n테이블 간 관계를 쉽게 연결할 수 있습니다.',
           540,
           420
         );
@@ -225,11 +250,36 @@ export default function ProjectEditorPage() {
 
   const isReadOnly = myRole === 'viewer';
 
+  // Handle Canvas Settings Update & Yjs Broadcast
+  const handleUpdateCanvasSettings = useCallback(
+    (updates: Partial<CanvasSettings>) => {
+      setCanvasSettings((prev) => {
+        const next = { ...prev, ...updates };
+        if (manager && !isReadOnly) {
+          manager.doc.transact(() => {
+            if (updates.backgroundColor) {
+              manager.metaMap.set('canvasBg', updates.backgroundColor);
+            }
+            if (updates.gridType) {
+              manager.metaMap.set('canvasGrid', updates.gridType);
+            }
+            if (updates.zoomLabelScale !== undefined) {
+              manager.metaMap.set('canvasZoomScale', updates.zoomLabelScale);
+            }
+          }, manager.doc.clientID);
+        }
+        return next;
+      });
+    },
+    [manager, isReadOnly]
+  );
+
+
   // Actions
   const handleAddTable = useCallback(() => {
     if (!manager || isReadOnly) return;
     const count = Object.keys(tables).length + 1;
-    const colors = ['#4f46e5', '#2563eb', '#0d9488', '#16a34a', '#d97706', '#dc2626', '#7c3aed'];
+    const colors = ['#0c8ce9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
     const chosenColor = colors[(count - 1) % colors.length];
 
     const posX = 150 + ((count * 40) % 400);
@@ -310,6 +360,7 @@ export default function ProjectEditorPage() {
         handleAddMemo();
       } else if (e.key === 'Escape') {
         setActiveTool('select');
+        setIsInspectorOpen(false);
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !isReadOnly) {
         e.preventDefault();
         manager?.undoManager.undo();
@@ -325,18 +376,18 @@ export default function ProjectEditorPage() {
 
   if (!manager || !project || !user) {
     return (
-      <div className="w-screen h-screen bg-slate-950 text-slate-100 flex items-center justify-center font-sans">
+      <div className="w-screen h-screen bg-[#1e1e1e] text-white flex items-center justify-center font-sans">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-9 h-9 rounded-full border-3 border-indigo-500 border-t-transparent animate-spin" />
-          <p className="text-sm font-medium text-slate-400">ERD Studio 캔버스를 불러오는 중...</p>
+          <div className="w-8 h-8 rounded-full border-2 border-[#0c8ce9] border-t-transparent animate-spin" />
+          <p className="text-xs font-medium text-neutral-400">ERD Studio 캔버스를 불러오는 중...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-slate-950 font-sans overflow-hidden select-none">
-      {/* Top Toolbar */}
+    <div className="w-screen h-screen flex flex-col bg-[#1e1e1e] font-sans overflow-hidden select-none">
+      {/* Top Toolbar (Figma Style) */}
       <Toolbar
         projectTitle={projectTitle}
         onUpdateTitle={handleUpdateTitle}
@@ -350,9 +401,11 @@ export default function ProjectEditorPage() {
         userRole={myRole}
         onOpenShareModal={() => setIsShareModalOpen(true)}
         memberCount={mockStore.getMembers(project.id).length}
+        onToggleInspector={() => setIsInspectorOpen((prev) => !prev)}
+        isInspectorOpen={isInspectorOpen}
       />
 
-      {/* Center Layout: Sidebar + Canvas */}
+      {/* Center Layout: Sidebar + Canvas + Inspector */}
       <div className="flex-1 flex relative overflow-hidden">
         {/* Left Sidebar Tools */}
         <Sidebar
@@ -369,7 +422,7 @@ export default function ProjectEditorPage() {
         />
 
         {/* Main Canvas Area */}
-        <main className="flex-1 relative">
+        <main className="flex-1 relative flex">
           <ERDCanvas
             manager={manager}
             tables={tables}
@@ -382,11 +435,26 @@ export default function ProjectEditorPage() {
             isIdentifyingMode={isIdentifyingMode}
             isMiniMapOpen={isMiniMapOpen}
             reactFlowInstanceRef={reactFlowInstanceRef}
+            canvasSettings={canvasSettings}
+          />
+
+          {/* Figma Right Inspector Panel (Page Background, Grid, Schema Stats) */}
+          <CanvasInspector
+            isOpen={isInspectorOpen}
+            onClose={() => setIsInspectorOpen(false)}
+            settings={canvasSettings}
+            onUpdateSettings={handleUpdateCanvasSettings}
+            tableCount={Object.keys(tables).length}
+            relationshipCount={Object.keys(relationships).length}
+            displayMode={displayMode}
+            setDisplayMode={setDisplayMode}
+            onOpenExport={() => setIsExportOpen(true)}
+            onOpenDomain={() => setIsDomainOpen(true)}
           />
 
           {/* Read Only Watermark Notice for Viewer */}
           {isReadOnly && (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-slate-700/80 px-4 py-1.5 rounded-full backdrop-blur-md shadow-xl flex items-center gap-2 text-xs text-slate-300 pointer-events-none z-20">
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1e1e1e]/90 border border-white/20 px-3.5 py-1 rounded-full backdrop-blur-md shadow-xl flex items-center gap-2 text-xs text-neutral-300 pointer-events-none z-20 whitespace-nowrap">
               <span className="w-2 h-2 rounded-full bg-amber-400" />
               <span>현재 <strong>Viewer(읽기 전용)</strong> 권한으로 열람 중입니다.</span>
             </div>
@@ -440,3 +508,4 @@ export default function ProjectEditorPage() {
     </div>
   );
 }
+

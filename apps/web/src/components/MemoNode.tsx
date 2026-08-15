@@ -12,11 +12,11 @@ export interface MemoNodeData {
 }
 
 const MEMO_THEMES: Record<string, { bg: string; border: string; text: string; placeholder: string }> = {
-  '#fef08a': { bg: '#fef08a', border: '#fde047', text: '#713f12', placeholder: '#a16207' }, // Yellow
-  '#fed7aa': { bg: '#fed7aa', border: '#fdba74', text: '#7c2d12', placeholder: '#c2410c' }, // Orange
-  '#bbf7d0': { bg: '#bbf7d0', border: '#86efac', text: '#14532d', placeholder: '#15803d' }, // Green
-  '#bfdbfe': { bg: '#bfdbfe', border: '#93c5fd', text: '#1e3a8a', placeholder: '#1d4ed8' }, // Blue
-  '#fbcfe8': { bg: '#fbcfe8', border: '#f472b6', text: '#831843', placeholder: '#be185d' }, // Pink
+  '#fef08a': { bg: '#fef9c3', border: '#fde047', text: '#713f12', placeholder: '#a16207' }, // Soft Yellow
+  '#fed7aa': { bg: '#ffedd5', border: '#fdba74', text: '#7c2d12', placeholder: '#c2410c' }, // Soft Orange
+  '#bbf7d0': { bg: '#dcfce7', border: '#86efac', text: '#14532d', placeholder: '#15803d' }, // Soft Green
+  '#bfdbfe': { bg: '#dbeafe', border: '#93c5fd', text: '#1e3a8a', placeholder: '#1d4ed8' }, // Soft Blue
+  '#fbcfe8': { bg: '#fce7f3', border: '#f472b6', text: '#831843', placeholder: '#be185d' }, // Soft Pink
 };
 
 const COLOR_KEYS = ['#fef08a', '#fed7aa', '#bbf7d0', '#bfdbfe', '#fbcfe8'];
@@ -26,7 +26,6 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
   const [content, setContent] = useState(memo?.content || '');
   const isFocusedRef = useRef(false);
 
-  // 원격 사용자의 실시간 메모 내용 변경 동기화 (내가 편집 중이 아닐 때만 적용하여 한글 IME 조합 보호)
   useEffect(() => {
     if (!isFocusedRef.current && memo?.content !== undefined) {
       setContent(memo.content);
@@ -39,18 +38,18 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
   return (
     <div
       style={{ backgroundColor: theme.bg, borderColor: theme.border }}
-      className={`w-60 min-h-[140px] p-3 rounded-lg shadow-xl border flex flex-col justify-between transition-all ${
-        selected ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[#07090e]' : 'hover:shadow-2xl'
+      className={`w-56 sm:w-60 min-h-[130px] p-3 rounded-lg shadow-lg border flex flex-col justify-between transition-all ${
+        selected ? 'ring-2 ring-[#0c8ce9] shadow-2xl' : 'hover:shadow-xl'
       }`}
     >
-      <div className="flex items-center justify-between pb-1.5 border-b border-black/10 mb-2">
-        <div className="flex gap-1.5 nodrag">
+      <div className="flex items-center justify-between pb-1 border-b border-black/10 mb-2">
+        <div className="flex gap-1 nodrag">
           {COLOR_KEYS.map((c) => (
             <button
               key={c}
               onClick={() => onUpdate(memo.id, { color: c })}
               style={{ backgroundColor: c }}
-              className={`w-3.5 h-3.5 rounded-full border border-black/20 hover:scale-110 transition-transform ${
+              className={`w-3 h-3 rounded-full border border-black/20 hover:scale-110 transition-transform ${
                 colorKey === c ? 'ring-1.5 ring-black/80' : ''
               }`}
             />
@@ -61,7 +60,7 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="nodrag p-1 text-black/50 hover:text-rose-700 rounded hover:bg-black/5 transition-colors"
           title="메모 삭제"
         >
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-3 h-3" />
         </button>
       </div>
 
@@ -72,7 +71,6 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
         }}
         onBlur={() => {
           isFocusedRef.current = false;
-          // 포커스 아웃 시 최종 내용 확정 동기화
           onUpdate(memo.id, { content });
         }}
         onChange={(e) => {
@@ -88,3 +86,4 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
     </div>
   );
 };
+

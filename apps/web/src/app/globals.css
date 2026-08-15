@@ -41,18 +41,50 @@
   background: rgba(255, 255, 255, 0.24);
 }
 
-/* React Flow Overrides for Professional Dark UI */
-.react-flow__background {
-  background-color: #07090e !important;
+/* React Flow Figma Styling Overrides */
+.react-flow {
+  background-color: transparent !important;
+}
+
+.react-flow__pane {
+  background-color: transparent !important;
+}
+
+.react-flow__viewport {
+  transform-style: flat !important;
+  backface-visibility: hidden !important;
+}
+
+/* Crisp Text Rendering on Canvas Zoom */
+.react-flow__node {
+  transform: translateZ(0);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+/* Figma Style Selection Box */
+.react-flow__selection {
+  background: rgba(12, 140, 233, 0.12) !important;
+  border: 1.5px solid #0c8ce9 !important;
+  border-radius: 4px !important;
+  pointer-events: none !important;
+}
+
+.react-flow__nodesselection-rect {
+  background: rgba(12, 140, 233, 0.08) !important;
+  border: 1px dashed #0c8ce9 !important;
+  border-radius: 6px !important;
 }
 
 .react-flow__controls {
-  background-color: #0d111a !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5) !important;
+  background-color: #2c2c2c !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4) !important;
   overflow: hidden;
 }
+
 
 .react-flow__controls-button {
   background-color: #0d111a !important;

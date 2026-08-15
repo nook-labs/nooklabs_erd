@@ -4,14 +4,17 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
+  BackgroundVariant,
   MiniMap,
   Node,
   Edge,
   Connection,
+  SelectionMode,
   useNodesState,
   useEdgesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+
 
 import {
   TableModel,
@@ -42,6 +45,7 @@ import {
 import { RelationshipModal } from './RelationshipModal';
 import { CreateRelationshipModal } from './CreateRelationshipModal';
 import { MultiplayerCursors } from './MultiplayerCursors';
+import { CanvasSettings } from './CanvasInspector';
 
 interface ERDCanvasProps {
   manager: ERDDocManager;
@@ -55,6 +59,7 @@ interface ERDCanvasProps {
   isIdentifyingMode: boolean;
   isMiniMapOpen: boolean;
   reactFlowInstanceRef?: React.MutableRefObject<any>;
+  canvasSettings: CanvasSettings;
 }
 
 const nodeTypes = {
@@ -77,6 +82,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   setActiveTool,
   isMiniMapOpen,
   reactFlowInstanceRef,
+  canvasSettings,
 }) => {
   // Pending source table for Relationship creation (Click Parent -> Click Child)
   const [selectedParentTableId, setSelectedParentTableId] = useState<string | null>(null);
@@ -110,6 +116,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         data: {
           table,
           displayMode,
+          zoomLabelScale: canvasSettings.zoomLabelScale ?? 1.45,
           isSourceCandidate,
           isTargetCandidate,
           onUpdateTable: (tId: string, updates: Partial<TableModel>) =>
@@ -123,10 +130,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           onTableClick: (tId: string) => {
             if (activeTool.startsWith('rel-')) {
               if (!selectedParentTableId) {
-                // Step 1: Select Parent
                 setSelectedParentTableId(tId);
               } else if (selectedParentTableId !== tId) {
-                // Step 2: Prompt Identifying vs Non-Identifying Choice
                 const targetMult: any = activeTool.replace('rel-', '');
                 setPendingCreation({
                   parentId: selectedParentTableId,
@@ -157,12 +162,10 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     return [...tableNodes, ...memoNodes];
   }, [tables, nodes, memos, displayMode, selectedParentTableId, activeTool, manager, setActiveTool]);
 
-  // Convert Yjs relationships to React Flow Edges with Exact Handle Names matching TableNode
-  // Convert Yjs relationships to React Flow Edges with Dynamic Multi-Edge Offset Distribution
+  // Convert Yjs relationships to React Flow Edges
   const computedEdges: Edge[] = useMemo(() => {
     const relList = Object.values(relationships);
 
-    // Pass 1: Determine optimal handles for each relationship
     const edgeCalculations = relList.map((rel) => {
       const parentNode = nodes[rel.parentTableId];
       const childNode = nodes[rel.childTableId];
@@ -196,7 +199,6 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
             targetHandle = 'target-bottom';
           }
         } else {
-          // Diagonal placement: distribute to top/bottom on target so horizontal edges can use left/right without collision
           if (dx > 0 && dy > 0) {
             sourceHandle = 'source-right';
             targetHandle = 'target-top';
@@ -216,7 +218,6 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
       return { rel, sourceHandle, targetHandle };
     });
 
-    // Pass 2: Calculate target & source grouping & offsets for parallel edge routing
     const targetGroups: Record<string, number[]> = {};
     const sourceGroups: Record<string, number[]> = {};
 
@@ -236,7 +237,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         targetOffsets[indices[0]] = { y: 0, x: 0 };
       } else {
         const count = indices.length;
-        const spacing = 28; // 28px gap
+        const spacing = 28;
         indices.forEach((idx, i) => {
           const offsetVal = (i - (count - 1) / 2) * spacing;
           const targetHandle = edgeCalculations[idx].targetHandle;
@@ -293,34 +294,48 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     });
   }, [relationships, nodes, manager]);
 
-  // Local state for smooth 60fps dragging
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(computedNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(computedEdges);
 
-  // Sync external changes to local state
+  // Keep existing node selection state when Yjs syncs
   useEffect(() => {
-    setRfNodes(computedNodes);
+    setRfNodes((prevNodes) => {
+      const selectedMap = new Map(prevNodes.map((n) => [n.id, n.selected]));
+      return computedNodes.map((n) => ({
+        ...n,
+        selected: selectedMap.get(n.id) ?? false,
+      }));
+    });
   }, [computedNodes, setRfNodes]);
 
   useEffect(() => {
     setRfEdges(computedEdges);
   }, [computedEdges, setRfEdges]);
 
-  // Node drag stop -> persist position to Yjs
+  // Deselect all nodes only when explicitly clicking on the empty canvas pane
+  const onPaneClick = useCallback(() => {
+    setRfNodes((prev) => prev.map((n) => (n.selected ? { ...n, selected: false } : n)));
+  }, [setRfNodes]);
+
+
   const onNodeDragStop = useCallback(
-    (_: any, node: Node) => {
-      if (node.type === 'memoNode') {
-        updateMemoAction(manager, node.id, {
-          position: { x: node.position.x, y: node.position.y },
+    (_: any, node: Node, draggedNodes?: Node[]) => {
+      const targets = draggedNodes && draggedNodes.length > 0 ? draggedNodes : [node];
+      manager.doc.transact(() => {
+        targets.forEach((n) => {
+          if (n.type === 'memoNode') {
+            updateMemoAction(manager, n.id, {
+              position: { x: n.position.x, y: n.position.y },
+            });
+          } else {
+            updateNodePositionAction(manager, n.id, n.position.x, n.position.y);
+          }
         });
-      } else {
-        updateNodePositionAction(manager, node.id, node.position.x, node.position.y);
-      }
+      }, manager.doc.clientID);
     },
     [manager]
   );
 
-  // Handle Drag & Drop connection between node handles -> Prompt modal
   const onConnect = useCallback(
     (params: Connection) => {
       if (params.source && params.target && params.source !== params.target) {
@@ -353,6 +368,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     setPendingCreation(null);
   };
 
+  const isRelToolActive = activeTool.startsWith('rel-');
+
   const pendingParentTable = pendingCreation ? tables[pendingCreation.parentId] : null;
   const pendingChildTable = pendingCreation ? tables[pendingCreation.childId] : null;
 
@@ -376,30 +393,57 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     manager.provider.awareness.setLocalStateField('cursor', null);
   }, [manager]);
 
+  // Map Grid Variant
+  const bgVariant = useMemo(() => {
+    switch (canvasSettings.gridType) {
+      case 'lines':
+        return BackgroundVariant.Lines;
+      case 'cross':
+        return BackgroundVariant.Cross;
+      case 'dots':
+      default:
+        return BackgroundVariant.Dots;
+    }
+  }, [canvasSettings.gridType]);
+
+  const isLightBg = useMemo(() => {
+    const hex = canvasSettings.backgroundColor.replace('#', '');
+    if (hex.length === 6) {
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+    }
+    return false;
+  }, [canvasSettings.backgroundColor]);
+
+  const gridDotColor = isLightBg ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.12)';
+
   return (
     <div
       onPointerMove={handlePointerMove}
       onPointerLeave={handlePointerLeave}
-      className="w-full h-full bg-[#07090e] relative overflow-hidden"
+      style={{ backgroundColor: canvasSettings.backgroundColor }}
+      className="w-full h-full relative overflow-hidden transition-colors duration-200"
     >
-      {/* Floating Relationship Mode Pill Banner */}
+      {/* Floating Relationship Mode Banner */}
       {activeTool.startsWith('rel-') && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-[#0d111a]/95 border border-indigo-500/80 text-white px-4 py-2 rounded-full shadow-[0_10px_30px_rgba(79,70,229,0.3)] backdrop-blur-xl flex items-center gap-3 text-xs">
-          <span className="relative flex h-2 w-2">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-[#1e1e1e]/95 border border-[#0c8ce9] text-white px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs whitespace-nowrap">
+          <span className="relative flex h-2 w-2 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
           </span>
-          <span className="font-medium text-slate-200">
+          <span className="font-medium text-neutral-200">
             {!selectedParentTableId
-              ? '① 부모 테이블(1)을 클릭하세요'
-              : '② 자식 테이블(N)을 클릭하여 관계를 연결하세요'}
+              ? '① 부모 테이블(1) 클릭'
+              : '② 자식 테이블(N) 클릭'}
           </span>
           <button
             onClick={() => {
               setActiveTool('select');
               setSelectedParentTableId(null);
             }}
-            className="text-[11px] text-indigo-400 hover:text-white underline font-semibold ml-2 transition-colors"
+            className="text-[11px] text-[#0c8ce9] hover:text-white underline font-semibold ml-1.5 transition-colors"
           >
             취소 (Esc)
           </button>
@@ -414,6 +458,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeDragStop={onNodeDragStop}
+        onPaneClick={onPaneClick}
         onConnect={onConnect}
         onInit={(instance) => {
           if (reactFlowInstanceRef) {
@@ -421,24 +466,44 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           }
           instance.fitView({ padding: 0.2 });
         }}
-        colorMode="dark"
-        minZoom={0.2}
+        colorMode={isLightBg ? 'light' : 'dark'}
+        minZoom={0.1}
         maxZoom={2.5}
+        selectionOnDrag={!isRelToolActive}
+        selectionMode={SelectionMode.Partial}
+        panOnDrag={isRelToolActive ? [0, 1, 2] : [1, 2]}
+        panOnScroll={true}
+        nodesDraggable={true}
+        elementsSelectable={true}
+        multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
         defaultEdgeOptions={{ type: 'relationshipEdge' }}
+        style={{ backgroundColor: canvasSettings.backgroundColor }}
       >
-        <Background color="#131926" gap={24} size={1} />
-        {/* Figma-Style Live Multiplayer Cursors */}
+
+        {canvasSettings.gridType !== 'none' && (
+          <Background
+            variant={bgVariant}
+            color={gridDotColor}
+            bgColor={canvasSettings.backgroundColor}
+            gap={20}
+            size={1.5}
+          />
+        )}
+
+        {/* Live Multiplayer Cursors */}
         <MultiplayerCursors manager={manager} />
+
         {isMiniMapOpen && (
           <MiniMap
-            nodeColor={(n) => (n.type === 'memoNode' ? '#fef08a' : '#4f46e5')}
-            maskColor="rgba(7, 9, 14, 0.85)"
+            nodeColor={(n) => (n.type === 'memoNode' ? '#fde047' : '#0c8ce9')}
+            maskColor={isLightBg ? 'rgba(240, 240, 240, 0.7)' : 'rgba(20, 20, 20, 0.8)'}
             position="bottom-right"
           />
         )}
       </ReactFlow>
 
-      {/* Relationship Creation Confirmation Modal (Identifying vs Non-Identifying) */}
+
+      {/* Relationship Creation Modal */}
       <CreateRelationshipModal
         isOpen={!!pendingCreation}
         onClose={() => setPendingCreation(null)}
@@ -448,7 +513,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         onConfirm={handleConfirmCreate}
       />
 
-      {/* Relationship Settings Modal */}
+      {/* Relationship Edit Modal */}
       <RelationshipModal
         isOpen={!!editingRelationship}
         onClose={() => setEditingRelationship(null)}
@@ -465,3 +530,4 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     </div>
   );
 };
+

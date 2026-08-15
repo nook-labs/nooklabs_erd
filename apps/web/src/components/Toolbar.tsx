@@ -16,8 +16,8 @@ import {
   ChevronLeft,
   Users,
   Share2,
-  Shield,
   Eye,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -33,6 +33,8 @@ interface ToolbarProps {
   userRole?: ProjectRole;
   onOpenShareModal?: () => void;
   memberCount?: number;
+  onToggleInspector?: () => void;
+  isInspectorOpen?: boolean;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -48,6 +50,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   userRole = 'owner',
   onOpenShareModal,
   memberCount = 1,
+  onToggleInspector,
+  isInspectorOpen = false,
 }) => {
   const router = useRouter();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -75,55 +79,52 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     switch (userRole) {
       case 'owner':
         return (
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+          <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
             👑 Owner
           </span>
         );
       case 'editor':
         return (
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+          <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">
             ✏️ Editor
           </span>
         );
       case 'viewer':
         return (
-          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-500/20 text-slate-300 border border-slate-600/40 flex items-center gap-1">
-            <Eye className="w-3 h-3 text-slate-400" /> 읽기 전용 (Viewer)
+          <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-neutral-600/30 text-neutral-300 border border-neutral-500/40 flex items-center gap-1">
+            <Eye className="w-3 h-3 text-neutral-400" /> <span className="hidden sm:inline">읽기 전용</span>
           </span>
         );
     }
   };
 
   return (
-    <header className="h-12 bg-[#090d16] border-b border-white/[0.08] px-3 sm:px-4 flex items-center justify-between z-30 select-none shadow-[0_1px_3px_rgba(0,0,0,0.4)]">
-      {/* Left Section: Back to Dashboard & Brand & Project Name & History */}
-      <div className="flex items-center gap-2.5">
+    <header className="h-11 bg-[#2c2c2c] border-b border-white/[0.08] px-2 sm:px-4 flex items-center justify-between z-30 select-none shadow-md shrink-0 w-full overflow-x-hidden">
+      {/* Left Section: Back to Dashboard & Project Title & Role */}
+      <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
         {/* Back to Dashboard Button */}
         <button
           onClick={() => router.push('/dashboard')}
           title="대시보드로 이동"
-          className="flex items-center gap-1 px-2 py-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] text-xs font-semibold transition-colors"
+          className="flex items-center justify-center w-7 h-7 sm:w-auto sm:px-2 rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] text-xs font-semibold transition-colors shrink-0"
         >
-          <ChevronLeft className="w-4 h-4" />
-          <span className="hidden sm:inline">대시보드</span>
+          <ChevronLeft className="w-4 h-4 shrink-0" />
+          <span className="hidden sm:inline ml-0.5">대시보드</span>
         </button>
 
-        <div className="h-4 w-[1px] bg-white/[0.08]" />
+        <div className="h-3.5 w-[1px] bg-white/[0.1] shrink-0" />
 
-        {/* Brand Monogram */}
-        <div className="flex items-center gap-2 pr-2">
-          <div className="w-5 h-5 rounded-md bg-indigo-600 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]">
+        {/* Brand Icon */}
+        <div className="hidden md:flex items-center gap-1.5 shrink-0">
+          <div className="w-5 h-5 rounded bg-[#0c8ce9] flex items-center justify-center shadow-sm">
             <Database className="w-3 h-3 text-white" />
           </div>
-          <span className="font-bold text-xs text-slate-200 tracking-tight hidden md:flex items-center gap-0.5">
-            NookLabs<span className="text-indigo-400 font-black">ERD</span>
-          </span>
         </div>
 
-        {/* Project Title Editor */}
-        <div className="flex items-center gap-2">
+        {/* Project Title Inline Editor */}
+        <div className="flex items-center gap-1.5 min-w-0">
           {isEditingTitle && !isReadOnly ? (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 min-w-0">
               <input
                 type="text"
                 value={title}
@@ -136,12 +137,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                     setIsEditingTitle(false);
                   }
                 }}
-                className="bg-[#131926] text-white font-medium text-xs px-2 py-0.5 rounded border border-indigo-500/80 outline-none w-44 shadow-inner"
+                className="bg-[#1e1e1e] text-white font-medium text-xs px-2 py-0.5 rounded border border-[#0c8ce9] outline-none w-28 sm:w-44 shadow-inner"
                 autoFocus
               />
               <button
                 onClick={handleFinishEdit}
-                className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 rounded transition-colors"
+                className="p-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 rounded transition-colors shrink-0"
                 title="저장"
               >
                 <Check className="w-3.5 h-3.5" />
@@ -151,16 +152,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <button
               onClick={() => !isReadOnly && setIsEditingTitle(true)}
               disabled={isReadOnly}
-              className={`group flex items-center gap-1.5 px-2 py-1 rounded transition-all text-slate-200 ${
-                !isReadOnly ? 'hover:bg-white/[0.04]' : 'cursor-default'
+              className={`group flex items-center gap-1 px-1.5 py-0.5 rounded transition-all text-neutral-200 min-w-0 max-w-[120px] sm:max-w-[220px] ${
+                !isReadOnly ? 'hover:bg-white/[0.08]' : 'cursor-default'
               }`}
               title={!isReadOnly ? '클릭하여 프로젝트 이름 변경' : '읽기 전용'}
             >
-              <span className="font-semibold text-xs text-slate-200 group-hover:text-white transition-colors max-w-[180px] truncate">
+              <span className="font-semibold text-xs text-white truncate">
                 {projectTitle || 'Untitled_Schema'}
               </span>
               {!isReadOnly && (
-                <Pencil className="w-3 h-3 text-slate-500 group-hover:text-indigo-400 opacity-0 group-hover:opacity-100 transition-all" />
+                <Pencil className="w-2.5 h-2.5 text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-0.5" />
               )}
             </button>
           )}
@@ -170,17 +171,17 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
         {/* Undo / Redo Actions */}
         {!isReadOnly && (
-          <div className="hidden sm:flex items-center gap-0.5 pl-2 border-l border-white/[0.08]">
+          <div className="hidden sm:flex items-center gap-0.5 pl-1.5 border-l border-white/[0.08] shrink-0">
             <button
               onClick={onUndo}
-              className="p-1.5 rounded hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 active:scale-95 transition-all"
+              className="p-1.5 rounded hover:bg-white/[0.08] text-neutral-400 hover:text-white active:scale-95 transition-all"
               title="실행 취소 (Ctrl+Z)"
             >
               <Undo2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={onRedo}
-              className="p-1.5 rounded hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 active:scale-95 transition-all"
+              className="p-1.5 rounded hover:bg-white/[0.08] text-neutral-400 hover:text-white active:scale-95 transition-all"
               title="다시 실행 (Ctrl+Y)"
             >
               <Redo2 className="w-3.5 h-3.5" />
@@ -189,85 +190,60 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         )}
       </div>
 
-      {/* Center Section: View Mode Switcher */}
-      <div className="hidden md:flex items-center bg-[#07090e] p-0.5 rounded-lg border border-white/[0.08] shadow-inner">
-        <button
-          onClick={() => setDisplayMode('physical')}
-          className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
-            displayMode === 'physical'
-              ? 'bg-[#1a2234] text-white font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.3)] border border-white/[0.08]'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.02]'
-          }`}
-        >
-          물리명
-        </button>
-        <button
-          onClick={() => setDisplayMode('logical')}
-          className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
-            displayMode === 'logical'
-              ? 'bg-[#1a2234] text-white font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.3)] border border-white/[0.08]'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.02]'
-          }`}
-        >
-          논리명
-        </button>
-        <button
-          onClick={() => setDisplayMode('both')}
-          className={`px-3 py-1 rounded-md text-[11px] font-medium transition-all ${
-            displayMode === 'both'
-              ? 'bg-[#1a2234] text-white font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.3)] border border-white/[0.08]'
-              : 'text-slate-400 hover:text-slate-200 hover:bg-white/[0.02]'
-          }`}
-        >
-          물리+논리 동시
-        </button>
-      </div>
-
-      {/* Right Section: Validation & Share & Sync */}
-      <div className="flex items-center gap-2">
-        {/* Share Button */}
-        {onOpenShareModal && (
-          <button
-            onClick={onOpenShareModal}
-            className="flex items-center gap-1.5 px-3 py-1 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-sm transition-all active:scale-[0.98]"
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>공유 ({memberCount})</span>
-          </button>
-        )}
-
+      {/* Right Section: Validation, Design Inspector Toggle, Share Button */}
+      <div className="flex items-center gap-1 sm:gap-2 shrink-0">
         {/* Validation Issues Trigger */}
         <button
           onClick={onToggleValidation}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border transition-all active:scale-[0.98] ${
+          className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap ${
             errorCount > 0
-              ? 'bg-rose-950/40 border-rose-800/60 text-rose-300 hover:bg-rose-900/40'
+              ? 'bg-rose-950/50 border-rose-800/80 text-rose-300 hover:bg-rose-900/50'
               : warningCount > 0
-              ? 'bg-amber-950/40 border-amber-800/60 text-amber-300 hover:bg-amber-900/40'
-              : 'bg-[#0e131f] border-white/[0.08] text-slate-300 hover:text-white hover:bg-[#141b2c]'
+              ? 'bg-amber-950/50 border-amber-800/80 text-amber-300 hover:bg-amber-900/50'
+              : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
           }`}
+          title="스키마 무결성 검증"
         >
           {errorCount > 0 ? (
-            <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+            <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
           ) : warningCount > 0 ? (
-            <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+            <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
           ) : (
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           )}
           <span className="hidden sm:inline">
             {issues.length > 0 ? `검증 (${issues.length})` : '정상'}
           </span>
         </button>
 
-        {/* Sync Status Badge */}
-        <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-[#0e131f] border border-white/[0.08] text-[11px] text-slate-300 font-medium">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span className="hidden sm:inline">동기화</span>
-        </div>
+        {/* Figma Inspector Toggle Button */}
+        {onToggleInspector && (
+          <button
+            onClick={onToggleInspector}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap ${
+              isInspectorOpen
+                ? 'bg-[#181818] border-[#0c8ce9] text-[#0c8ce9]'
+                : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
+            }`}
+            title="디자인 / 캔버스 배경 설정 (Inspector)"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden md:inline">디자인</span>
+          </button>
+        )}
+
+        {/* Figma Blue Share Button (Guaranteed No Wrap) */}
+        {onOpenShareModal && (
+          <button
+            onClick={onOpenShareModal}
+            className="flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1 bg-[#0c8ce9] hover:bg-[#0a77c7] text-white rounded text-xs font-semibold shadow-sm transition-all active:scale-[0.98] shrink-0 whitespace-nowrap leading-none"
+          >
+            <Share2 className="w-3.5 h-3.5 shrink-0" />
+            <span className="whitespace-nowrap">공유 {memberCount > 1 ? `(${memberCount})` : ''}</span>
+          </button>
+        )}
       </div>
     </header>
   );
 };
+
