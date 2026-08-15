@@ -1,0 +1,460 @@
+import { ERDDocManager } from './doc';
+import {
+  TableModel,
+  ColumnModel,
+  RelationshipModel,
+  NodeView,
+  RelationshipType,
+  Cardinality,
+  CrowsFootMultiplicity,
+  MemoModel,
+  DomainItem,
+} from '@/types/erd';
+
+export function createDefaultColumn(index: number = 1): ColumnModel {
+  const id = `col_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  return {
+    id,
+    logicalName: index === 1 ? '아이디' : `컬럼_${index}`,
+    physicalName: index === 1 ? 'id' : `column_${index}`,
+    type: { name: index === 1 ? 'BIGINT' : 'VARCHAR', length: index === 1 ? undefined : 255 },
+    nullable: index === 1 ? false : true,
+    isPk: index === 1,
+    isFk: false,
+    autoIncrement: index === 1,
+    comment: '',
+    origin: 'user',
+  };
+}
+
+export function addTableAction(
+  manager: ERDDocManager,
+  logicalName: string = '신규 테이블',
+  physicalName: string = 'new_table',
+  x: number = 200,
+  y: number = 200,
+  headerColor: string = '#4f46e5'
+): string {
+  const tableId = `tbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const defaultCol = createDefaultColumn(1);
+
+  const table: TableModel = {
+    id: tableId,
+    schemaName: 'public',
+    logicalName,
+    physicalName,
+    comment: '',
+    headerColor,
+    columnOrder: [defaultCol.id],
+    columnsById: { [defaultCol.id]: defaultCol },
+    primaryKeyId: defaultCol.id,
+    indexIds: [],
+    constraintIds: [],
+  };
+
+  const nodeView: NodeView = {
+    id: `node_${tableId}`,
+    tableId,
+    position: { x, y, width: 340, height: 220 },
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(tableId, table);
+    manager.nodesMap.set(tableId, nodeView);
+  }, manager.doc.clientID);
+
+  return tableId;
+}
+
+export function duplicateTableAction(
+  manager: ERDDocManager,
+  tableId: string
+): string | null {
+  const original = manager.tablesMap.get(tableId);
+  const originalNode = manager.nodesMap.get(tableId);
+  if (!original) return null;
+
+  const newTableId = `tbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const newColumnsById: Record<string, ColumnModel> = {};
+  const newColumnOrder: string[] = [];
+
+  original.columnOrder.forEach((colId) => {
+    const col = original.columnsById[colId];
+    if (col) {
+      const newColId = `col_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      newColumnsById[newColId] = {
+        ...col,
+        id: newColId,
+      };
+      newColumnOrder.push(newColId);
+    }
+  });
+
+  const duplicatedTable: TableModel = {
+    ...original,
+    id: newTableId,
+    logicalName: `${original.logicalName} (복사본)`,
+    physicalName: `${original.physicalName}_copy`,
+    columnOrder: newColumnOrder,
+    columnsById: newColumnsById,
+    primaryKeyId: newColumnOrder[0],
+  };
+
+  const posX = (originalNode?.position.x ?? 100) + 40;
+  const posY = (originalNode?.position.y ?? 100) + 40;
+
+  const nodeView: NodeView = {
+    id: `node_${newTableId}`,
+    tableId: newTableId,
+    position: { x: posX, y: posY, width: 340, height: 220 },
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(newTableId, duplicatedTable);
+    manager.nodesMap.set(newTableId, nodeView);
+  }, manager.doc.clientID);
+
+  return newTableId;
+}
+
+export function updateTableAction(
+  manager: ERDDocManager,
+  tableId: string,
+  updates: Partial<TableModel>
+) {
+  const current = manager.tablesMap.get(tableId);
+  if (!current) return;
+
+  const updated: TableModel = {
+    ...current,
+    ...updates,
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(tableId, updated);
+  }, manager.doc.clientID);
+}
+
+export function deleteTableAction(manager: ERDDocManager, tableId: string) {
+  manager.doc.transact(() => {
+    manager.tablesMap.delete(tableId);
+    manager.nodesMap.delete(tableId);
+
+    // Clean up associated relationships
+    const relsToDelete: string[] = [];
+    manager.relationshipsMap.forEach((rel, relId) => {
+      if (rel.parentTableId === tableId || rel.childTableId === tableId) {
+        relsToDelete.push(relId);
+      }
+    });
+
+    relsToDelete.forEach((relId) => manager.relationshipsMap.delete(relId));
+  }, manager.doc.clientID);
+}
+
+export function addColumnAction(
+  manager: ERDDocManager,
+  tableId: string,
+  columnData?: Partial<ColumnModel>
+): string | null {
+  const table = manager.tablesMap.get(tableId);
+  if (!table) return null;
+
+  const nextIndex = table.columnOrder.length + 1;
+  const newCol: ColumnModel = {
+    ...createDefaultColumn(nextIndex),
+    isPk: false,
+    nullable: true,
+    autoIncrement: false,
+    ...columnData,
+  };
+
+  const updatedTable: TableModel = {
+    ...table,
+    columnOrder: [...table.columnOrder, newCol.id],
+    columnsById: {
+      ...table.columnsById,
+      [newCol.id]: newCol,
+    },
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(tableId, updatedTable);
+  }, manager.doc.clientID);
+
+  return newCol.id;
+}
+
+export function updateColumnAction(
+  manager: ERDDocManager,
+  tableId: string,
+  columnId: string,
+  updates: Partial<ColumnModel>
+) {
+  const table = manager.tablesMap.get(tableId);
+  if (!table || !table.columnsById[columnId]) return;
+
+  const prevCol = table.columnsById[columnId];
+  const updatedColumn: ColumnModel = {
+    ...prevCol,
+    ...updates,
+  };
+
+  // If changing PK
+  let newPkId = table.primaryKeyId;
+  if (updates.isPk !== undefined) {
+    if (updates.isPk) {
+      newPkId = columnId;
+      updatedColumn.nullable = false;
+    } else if (table.primaryKeyId === columnId) {
+      newPkId = undefined;
+    }
+  }
+
+  const updatedTable: TableModel = {
+    ...table,
+    primaryKeyId: newPkId,
+    columnsById: {
+      ...table.columnsById,
+      [columnId]: updatedColumn,
+    },
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(tableId, updatedTable);
+  }, manager.doc.clientID);
+}
+
+export function deleteColumnAction(manager: ERDDocManager, tableId: string, columnId: string) {
+  const table = manager.tablesMap.get(tableId);
+  if (!table) return;
+
+  const newColumnOrder = table.columnOrder.filter((id) => id !== columnId);
+  const newColumnsById = { ...table.columnsById };
+  delete newColumnsById[columnId];
+
+  const updatedTable: TableModel = {
+    ...table,
+    columnOrder: newColumnOrder,
+    columnsById: newColumnsById,
+    primaryKeyId: table.primaryKeyId === columnId ? newColumnOrder[0] : table.primaryKeyId,
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(tableId, updatedTable);
+  }, manager.doc.clientID);
+}
+
+export function addRelationshipAction(
+  manager: ERDDocManager,
+  parentTableId: string,
+  childTableId: string,
+  relationshipType: RelationshipType = 'non-identifying',
+  cardinality: Cardinality = 'one-to-many',
+  sourceMultiplicity?: CrowsFootMultiplicity,
+  targetMultiplicity?: CrowsFootMultiplicity
+): string | null {
+  const parentTable = manager.tablesMap.get(parentTableId);
+  const childTable = manager.tablesMap.get(childTableId);
+  if (!parentTable || !childTable) return null;
+
+  // Find parent PK column or default column
+  const parentPkColId = parentTable.primaryKeyId || parentTable.columnOrder[0];
+  const parentPkCol = parentTable.columnsById[parentPkColId] || Object.values(parentTable.columnsById)[0];
+  if (!parentPkCol) return null;
+
+  const relId = `rel_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  // Generate unique FK column names for child table
+  const baseFkName = `${parentTable.physicalName}_${parentPkCol.physicalName}`;
+  const baseFkLogical = `${parentTable.logicalName || parentTable.physicalName} ${parentPkCol.logicalName || parentPkCol.physicalName}`;
+
+  let fkColName = baseFkName;
+  let fkLogicalName = baseFkLogical;
+  let counter = 1;
+  const existingNames = new Set(Object.values(childTable.columnsById).map((c) => c.physicalName));
+  while (existingNames.has(fkColName)) {
+    fkColName = `${baseFkName}_${counter}`;
+    fkLogicalName = `${baseFkLogical} ${counter}`;
+    counter++;
+  }
+
+  const fkCol: ColumnModel = {
+    id: `col_fk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    logicalName: fkLogicalName,
+    physicalName: fkColName,
+    type: { ...parentPkCol.type },
+    nullable: relationshipType === 'non-identifying',
+    isPk: relationshipType === 'identifying',
+    isFk: true,
+    origin: 'relationship-generated',
+    relationshipId: relId,
+    sourceColumnId: parentPkCol.id,
+  };
+
+  const updatedChildTable: TableModel = {
+    ...childTable,
+    columnOrder: [...childTable.columnOrder, fkCol.id],
+    columnsById: {
+      ...childTable.columnsById,
+      [fkCol.id]: fkCol,
+    },
+  };
+
+  const relationship: RelationshipModel = {
+    id: relId,
+    parentTableId,
+    childTableId,
+    columnMappings: [
+      {
+        parentColumnId: parentPkCol.id,
+        childColumnId: fkCol.id,
+      },
+    ],
+    relationshipType,
+    cardinality,
+    sourceMultiplicity:
+      sourceMultiplicity || (cardinality === 'one-to-one' ? 'one' : 'one'),
+    targetMultiplicity:
+      targetMultiplicity ||
+      (cardinality === 'one-to-one'
+        ? 'one'
+        : (relationshipType === 'identifying' ? 'mandatory-many' : 'optional-many')),
+    onDelete: 'NO ACTION',
+    onUpdate: 'NO ACTION',
+    constraintName: `FK_${childTable.physicalName}_${parentTable.physicalName}_${counter > 1 ? counter : Date.now().toString().slice(-4)}`,
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(childTableId, updatedChildTable);
+    manager.relationshipsMap.set(relId, relationship);
+  }, manager.doc.clientID);
+
+  return relId;
+}
+
+
+export function updateRelationshipAction(
+  manager: ERDDocManager,
+  relId: string,
+  updates: Partial<RelationshipModel>
+) {
+  const current = manager.relationshipsMap.get(relId);
+  if (!current) return;
+
+  const updated: RelationshipModel = {
+    ...current,
+    ...updates,
+  };
+
+  manager.doc.transact(() => {
+    manager.relationshipsMap.set(relId, updated);
+  }, manager.doc.clientID);
+}
+
+export function deleteRelationshipAction(manager: ERDDocManager, relId: string) {
+  const rel = manager.relationshipsMap.get(relId);
+  manager.doc.transact(() => {
+    if (rel) {
+      // Remove FK columns generated by this relationship in child table
+      const childTable = manager.tablesMap.get(rel.childTableId);
+      if (childTable) {
+        const generatedColIds = new Set(rel.columnMappings.map((m) => m.childColumnId));
+        const newOrder = childTable.columnOrder.filter((id) => !generatedColIds.has(id));
+        const newCols = { ...childTable.columnsById };
+        generatedColIds.forEach((id) => delete newCols[id]);
+
+        manager.tablesMap.set(rel.childTableId, {
+          ...childTable,
+          columnOrder: newOrder,
+          columnsById: newCols,
+        });
+      }
+    }
+    manager.relationshipsMap.delete(relId);
+  }, manager.doc.clientID);
+}
+
+// Memo Actions
+export function addMemoAction(
+  manager: ERDDocManager,
+  content: string = '새로운 메모를 입력하세요...',
+  x: number = 300,
+  y: number = 300,
+  color: string = '#fef08a'
+): string {
+  const memoId = `memo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const memo: MemoModel = {
+    id: memoId,
+    content,
+    color,
+    position: { x, y, width: 220, height: 160 },
+  };
+
+  manager.doc.transact(() => {
+    manager.memosMap.set(memoId, memo);
+  }, manager.doc.clientID);
+
+  return memoId;
+}
+
+export function updateMemoAction(
+  manager: ERDDocManager,
+  memoId: string,
+  updates: Partial<MemoModel>
+) {
+  const current = manager.memosMap.get(memoId);
+  if (!current) return;
+
+  const updated: MemoModel = {
+    ...current,
+    ...updates,
+  };
+
+  manager.doc.transact(() => {
+    manager.memosMap.set(memoId, updated);
+  }, manager.doc.clientID);
+}
+
+export function deleteMemoAction(manager: ERDDocManager, memoId: string) {
+  manager.doc.transact(() => {
+    manager.memosMap.delete(memoId);
+  }, manager.doc.clientID);
+}
+
+// Position updating
+export function updateNodePositionAction(
+  manager: ERDDocManager,
+  tableId: string,
+  x: number,
+  y: number
+) {
+  const current = manager.nodesMap.get(tableId);
+  if (!current) {
+    const newNode: NodeView = {
+      id: `node_${tableId}`,
+      tableId,
+      position: { x, y },
+    };
+    manager.doc.transact(() => {
+      manager.nodesMap.set(tableId, newNode);
+    }, manager.doc.clientID);
+    return;
+  }
+
+  const updated: NodeView = {
+    ...current,
+    position: { ...current.position, x, y },
+  };
+
+  manager.doc.transact(() => {
+    manager.nodesMap.set(tableId, updated);
+  }, manager.doc.clientID);
+}
+
+// Meta actions
+export function updateProjectTitleAction(manager: ERDDocManager, title: string) {
+  manager.doc.transact(() => {
+    manager.metaMap.set('title', title);
+  }, manager.doc.clientID);
+}
