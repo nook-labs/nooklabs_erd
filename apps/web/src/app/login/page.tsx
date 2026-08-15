@@ -59,10 +59,16 @@ export default function LoginPage() {
     if (isSupabaseConfigured && supabase) {
       try {
         if (isSignUp) {
+          const redirectOrigin =
+            typeof window !== 'undefined'
+              ? window.location.origin
+              : process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+
           const { error } = await supabase.auth.signUp({
             email,
             password,
             options: {
+              emailRedirectTo: `${redirectOrigin}/auth/callback`,
               data: {
                 full_name: displayName || email.split('@')[0],
               },
@@ -71,6 +77,7 @@ export default function LoginPage() {
           if (error) throw error;
           setMessage({ text: '가입 확인 이메일이 전송되었습니다. 이메일을 확인해주세요.', type: 'success' });
         } else {
+
           const { error } = await supabase.auth.signInWithPassword({
             email,
             password,
