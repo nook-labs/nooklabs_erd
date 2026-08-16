@@ -68,6 +68,7 @@ export interface TableModel {
   physicalName: string;
   comment: string;
   headerColor?: string; // e.g. '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#475569'
+  columnWidths?: Record<string, number>;
   columnOrder: string[];
   columnsById: Record<string, ColumnModel>;
   primaryKeyId?: string;

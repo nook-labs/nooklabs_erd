@@ -37,6 +37,8 @@ import {
   addColumnAction,
   updateColumnAction,
   deleteColumnAction,
+  reorderColumnsAction,
+  moveColumnAction,
   addRelationshipAction,
   updateRelationshipAction,
   deleteRelationshipAction,
@@ -127,10 +129,15 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
             updateTableAction(manager, tId, updates),
           onDuplicateTable: (tId: string) => duplicateTableAction(manager, tId),
           onDeleteTable: (tId: string) => deleteTableAction(manager, tId),
-          onAddColumn: (tId: string, colData?: any) => addColumnAction(manager, tId, colData),
+          onAddColumn: (tId: string, colData?: any, insertIndex?: number) =>
+            addColumnAction(manager, tId, colData, insertIndex),
           onUpdateColumn: (tId: string, cId: string, updates: any) =>
             updateColumnAction(manager, tId, cId, updates),
           onDeleteColumn: (tId: string, cId: string) => deleteColumnAction(manager, tId, cId),
+          onReorderColumns: (tId: string, newOrder: string[]) =>
+            reorderColumnsAction(manager, tId, newOrder),
+          onMoveColumn: (tId: string, cId: string, direction: 'up' | 'down') =>
+            moveColumnAction(manager, tId, cId, direction),
           onTableClick: (tId: string) => {
             if (activeTool.startsWith('rel-')) {
               if (!selectedParentTableId) {

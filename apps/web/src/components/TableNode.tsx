@@ -10,6 +10,9 @@ import {
   Copy,
   Palette,
   ChevronDown,
+  ChevronUp,
+  GripVertical,
+  CornerDownRight,
 } from 'lucide-react';
 
 export interface TableNodeData {
@@ -22,9 +25,11 @@ export interface TableNodeData {
   onUpdateTable: (tableId: string, updates: Partial<TableModel>) => void;
   onDuplicateTable: (tableId: string) => void;
   onDeleteTable: (tableId: string) => void;
-  onAddColumn: (tableId: string, columnData?: Partial<ColumnModel>) => void;
+  onAddColumn: (tableId: string, columnData?: Partial<ColumnModel>, insertIndex?: number) => void;
   onUpdateColumn: (tableId: string, columnId: string, updates: Partial<ColumnModel>) => void;
   onDeleteColumn: (tableId: string, columnId: string) => void;
+  onReorderColumns?: (tableId: string, newOrder: string[]) => void;
+  onMoveColumn?: (tableId: string, columnId: string, direction: 'up' | 'down') => void;
   onTableClick?: (tableId: string) => void;
 }
 
@@ -130,6 +135,70 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
   );
 };
 
+const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
+  logicalName: 120,
+  physicalName: 120,
+  domain: 120,
+  type: 110,
+  defaultValue: 100,
+  comment: 130,
+};
+
+const measureOptimalColumnWidth = (
+  colKey: string,
+  columns: ColumnModel[],
+  headerLabel: string,
+  extraPadding = 28
+): number => {
+  const getColText = (col: ColumnModel): string => {
+    switch (colKey) {
+      case 'logicalName':
+        return col.logicalName || '';
+      case 'physicalName':
+        return col.physicalName || '';
+      case 'domain':
+        return col.domain || '';
+      case 'type':
+        return col.type.name
+          ? `${col.type.name.toLowerCase()}${col.type.length ? `(${col.type.length})` : ''}`
+          : '';
+      case 'defaultValue':
+        return col.defaultExpression || '';
+      case 'comment':
+        return col.comment || '';
+      default:
+        return '';
+    }
+  };
+
+  const sampleTexts = [headerLabel, ...columns.map(getColText)];
+  let maxCalculatedWidth = 0;
+
+  for (const text of sampleTexts) {
+    if (!text) continue;
+    let w = 0;
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code > 127) {
+        w += 10.5; // 한글/전각 문자
+      } else if (code >= 65 && code <= 90) {
+        w += 8.2; // 대문자
+      } else {
+        w += 7.2; // 소문자, 숫자, 기호
+      }
+    }
+    if (w > maxCalculatedWidth) {
+      maxCalculatedWidth = w;
+    }
+  }
+
+  // Add extra room for dropdown arrows, input borders, paddings
+  const basePadding = (colKey === 'domain' || colKey === 'type') ? extraPadding + 20 : extraPadding;
+  const optimal = Math.ceil(maxCalculatedWidth + basePadding);
+  const minWidth = DEFAULT_COLUMN_WIDTHS[colKey] ? Math.min(80, DEFAULT_COLUMN_WIDTHS[colKey]) : 60;
+  return Math.max(minWidth, Math.min(650, optimal));
+};
+
 export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
   const nodeData = data as unknown as TableNodeData;
   const {
@@ -144,6 +213,8 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
     onAddColumn,
     onUpdateColumn,
     onDeleteColumn,
+    onReorderColumns,
+    onMoveColumn,
     onTableClick,
   } = nodeData;
 
@@ -154,6 +225,145 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
   const [activeDomainDropdown, setActiveDomainDropdown] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const domainDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Drag and drop state for column rows
+  const [draggedColId, setDraggedColId] = useState<string | null>(null);
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null);
+  const [dragOverPosition, setDragOverPosition] = useState<'above' | 'below'>('above');
+
+  // Column Widths State (Excel-like dynamic & persistent resizing)
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => ({
+    ...DEFAULT_COLUMN_WIDTHS,
+    ...(table.columnWidths || {}),
+  }));
+
+  // Sync external table.columnWidths updates
+  useEffect(() => {
+    if (table.columnWidths) {
+      setColumnWidths((prev) => ({
+        ...prev,
+        ...table.columnWidths,
+      }));
+    }
+  }, [table.columnWidths]);
+
+  const columns = table.columnOrder
+    .map((id) => table.columnsById[id])
+    .filter((col): col is ColumnModel => col !== undefined);
+
+  // Column Row Drag and Drop Handlers
+  const handleDragStart = (e: React.DragEvent, colId: string) => {
+    e.dataTransfer.setData('text/plain', colId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedColId(colId);
+  };
+
+  const handleDragOver = (e: React.DragEvent, targetColId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const isBelow = e.clientY - rect.top > rect.height / 2;
+    setDragOverColId(targetColId);
+    setDragOverPosition(isBelow ? 'below' : 'above');
+  };
+
+  const handleDrop = (e: React.DragEvent, targetColId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!draggedColId || draggedColId === targetColId) {
+      setDraggedColId(null);
+      setDragOverColId(null);
+      return;
+    }
+
+    const currentOrder = [...table.columnOrder];
+    const fromIndex = currentOrder.indexOf(draggedColId);
+    if (fromIndex === -1) return;
+
+    currentOrder.splice(fromIndex, 1);
+    let toIndex = currentOrder.indexOf(targetColId);
+    if (toIndex === -1) return;
+    if (dragOverPosition === 'below') {
+      toIndex += 1;
+    }
+
+    currentOrder.splice(toIndex, 0, draggedColId);
+
+    if (onReorderColumns) {
+      onReorderColumns(table.id, currentOrder);
+    } else {
+      onUpdateTable(table.id, { columnOrder: currentOrder });
+    }
+
+    setDraggedColId(null);
+    setDragOverColId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedColId(null);
+    setDragOverColId(null);
+  };
+
+  // Move Column Up/Down
+  const handleMove = (colId: string, direction: 'up' | 'down') => {
+    if (onMoveColumn) {
+      onMoveColumn(table.id, colId, direction);
+      return;
+    }
+    const idx = table.columnOrder.indexOf(colId);
+    if (idx === -1) return;
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (targetIdx < 0 || targetIdx >= table.columnOrder.length) return;
+
+    const nextOrder = [...table.columnOrder];
+    const [removed] = nextOrder.splice(idx, 1);
+    nextOrder.splice(targetIdx, 0, removed);
+    onUpdateTable(table.id, { columnOrder: nextOrder });
+  };
+
+  // Excel-like Drag Resize Handler
+  const handleResizeStart = (colKey: string, e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = columnWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 100;
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(50, Math.min(700, startWidth + deltaX));
+      setColumnWidths((prev) => ({ ...prev, [colKey]: newWidth }));
+    };
+
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      const deltaX = upEvent.clientX - startX;
+      const finalWidth = Math.max(50, Math.min(700, startWidth + deltaX));
+      const next = { ...columnWidths, [colKey]: finalWidth };
+      setColumnWidths(next);
+      queueMicrotask(() => {
+        onUpdateTable(table.id, { columnWidths: next });
+      });
+    };
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+  };
+
+  // Excel-like Double Click Auto-Fit Column Width Handler
+  const handleAutoFit = (colKey: string, headerLabel: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const optimalWidth = measureOptimalColumnWidth(colKey, columns, headerLabel);
+    const nextWidths = { ...columnWidths, [colKey]: optimalWidth };
+    setColumnWidths(nextWidths);
+    queueMicrotask(() => {
+      onUpdateTable(table.id, { columnWidths: nextWidths });
+    });
+  };
 
   // Close color picker on outside click
   useEffect(() => {
@@ -216,10 +426,6 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
     }
   }, [isEditingTitle]);
 
-  const columns = table.columnOrder
-    .map((id) => table.columnsById[id])
-    .filter((col): col is ColumnModel => col !== undefined);
-
   const headerColor = table.headerColor || '#10b981';
 
   const handleSaveTitle = useCallback(() => {
@@ -238,6 +444,20 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   const pointerDownPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
+  // Helper component for Resizer Handle
+  const renderResizer = (colKey: string, headerLabel: string) => (
+    <div
+      onPointerDown={(e) => handleResizeStart(colKey, e)}
+      onDoubleClick={(e) => handleAutoFit(colKey, headerLabel, e)}
+      className="nodrag absolute right-0 top-0 bottom-0 w-2 cursor-col-resize select-none flex items-center justify-center group/resizer z-20"
+      title="드래그하여 너비 조절, 더블 클릭 시 글자수에 맞게 자동 조정"
+    >
+      <div className="w-[1.5px] h-3.5 bg-emerald-700/60 group-hover/resizer:bg-emerald-400 group-hover/resizer:w-[2.5px] group-hover/resizer:h-full transition-all" />
+    </div>
+  );
+
+  const getWidth = (key: string) => columnWidths[key] || DEFAULT_COLUMN_WIDTHS[key] || 100;
+
   return (
     <div
       onPointerDown={(e) => {
@@ -252,7 +472,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           onTableClick(table.id);
         }
       }}
-      className={`min-w-[420px] bg-[#1e2420] text-white rounded-lg border font-sans text-xs shadow-2xl backdrop-blur-md transition-all overflow-visible relative transform-gpu [text-rendering:geometricPrecision] [backface-visibility:hidden] ${
+      className={`w-max min-w-[460px] bg-[#1e2420] text-white rounded-lg border font-sans text-xs shadow-2xl backdrop-blur-md transition-all overflow-visible relative transform-gpu [text-rendering:geometricPrecision] [backface-visibility:hidden] ${
         isSourceCandidate
           ? 'ring-2 ring-amber-400 border-amber-400/80 scale-[1.01]'
           : isTargetCandidate
@@ -262,18 +482,18 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           : 'border-white/[0.12] hover:border-white/[0.25]'
       }`}
     >
-      {/* Zoom-adaptive Frame Label */}
+      {/* Zoom-adaptive Frame Label (Clean flat style without heavy box-shadow) */}
       {showZoomTitle && (
         <div
           style={{
             transform: `translate(-50%, -100%) scale(${titleScale})`,
             transformOrigin: 'bottom center',
           }}
-          className="absolute left-1/2 -top-2.5 pointer-events-none z-50 whitespace-nowrap select-none font-bold text-white px-3.5 py-1.5 rounded-lg bg-[#18181b] border border-white/40 shadow-[0_10px_35px_rgba(0,0,0,0.85)] flex items-center gap-2 backdrop-blur-xl ring-1 ring-black/50"
+          className="absolute left-1/2 -top-2.5 pointer-events-none z-50 whitespace-nowrap select-none font-bold text-white px-3 py-1.5 rounded-lg bg-[#18181b] border border-white/30 flex items-center gap-2"
         >
           <div
             style={{ backgroundColor: headerColor }}
-            className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm ring-1 ring-white/30"
+            className="w-2.5 h-2.5 rounded-full shrink-0"
           />
           <span className="font-extrabold tracking-tight text-white text-[13px]">
             {displayMode === 'logical' ? (table.logicalName || table.physicalName) : table.physicalName}
@@ -334,7 +554,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
         className="!bg-[#10b981] !w-2.5 !h-2.5 !border-2 !border-[#1e2420] hover:!scale-150 transition-transform !cursor-crosshair opacity-0"
       />
 
-      {/* Table Header (ERD Cloud Green style by default) */}
+      {/* Table Header */}
       <div
         style={{ backgroundColor: headerColor }}
         className="px-3 py-2 flex items-center justify-between rounded-t-lg group text-white shadow-sm"
@@ -438,7 +658,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
             <Copy className="w-3.5 h-3.5" />
           </button>
 
-          {/* Add Column */}
+          {/* Add Column to bottom */}
           <button
             onClick={() => onAddColumn(table.id)}
             className="p-1 hover:bg-black/20 rounded text-white/90 hover:text-white transition-colors"
@@ -458,293 +678,421 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
         </div>
       </div>
 
-      {/* ERD Cloud Style Columns Table Header (Matching User Screenshot) */}
+      {/* ERD Cloud Style Columns Table Header (Excel-like Resizable) */}
       <div className="bg-[#193223]/90 px-2 py-1 text-[10px] text-emerald-300/80 border-b border-emerald-900/40 flex items-center font-mono tracking-tight select-none">
+        {/* Grip Handle & KEY Header */}
+        <div className="w-4 shrink-0 text-center font-bold text-emerald-600/60">#</div>
         <div className="w-7 shrink-0 text-center font-bold text-emerald-400">KEY</div>
         
         {displayMode !== 'physical' && (
-          <div className="w-28 shrink-0 px-1 font-semibold">논리명</div>
-        )}
-        {displayMode !== 'logical' && (
-          <div className="w-28 shrink-0 px-1 font-semibold">물리명</div>
+          <div
+            style={{ width: `${getWidth('logicalName')}px` }}
+            className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
+          >
+            <span className="truncate">논리명</span>
+            {renderResizer('logicalName', '논리명')}
+          </div>
         )}
 
-        <div className="w-32 shrink-0 px-1 font-semibold text-emerald-300/70">Domain</div>
-        <div className="w-28 shrink-0 px-1 font-semibold text-emerald-300/70">Type</div>
+        {displayMode !== 'logical' && (
+          <div
+            style={{ width: `${getWidth('physicalName')}px` }}
+            className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
+          >
+            <span className="truncate">물리명</span>
+            {renderResizer('physicalName', '물리명')}
+          </div>
+        )}
+
+        <div
+          style={{ width: `${getWidth('domain')}px` }}
+          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
+        >
+          <span className="truncate">Domain</span>
+          {renderResizer('domain', 'Domain')}
+        </div>
+
+        <div
+          style={{ width: `${getWidth('type')}px` }}
+          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
+        >
+          <span className="truncate">Type</span>
+          {renderResizer('type', 'Type')}
+        </div>
+
         <div className="w-16 shrink-0 text-center font-semibold">NOT NULL</div>
-        <div className="w-24 shrink-0 px-1 font-semibold text-emerald-300/70">Default value</div>
-        <div className="flex-1 min-w-[100px] px-1 font-semibold text-emerald-300/70">Comment</div>
-        <div className="w-4 shrink-0"></div>
+
+        <div
+          style={{ width: `${getWidth('defaultValue')}px` }}
+          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
+        >
+          <span className="truncate">Default value</span>
+          {renderResizer('defaultValue', 'Default value')}
+        </div>
+
+        <div
+          style={{ width: `${getWidth('comment')}px` }}
+          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
+        >
+          <span className="truncate">Comment</span>
+          {renderResizer('comment', 'Comment')}
+        </div>
+
+        {/* Row actions space */}
+        <div className="w-14 shrink-0"></div>
       </div>
 
-      {/* Columns List (ERD Cloud Grid Row) */}
+      {/* Columns List (ERD Cloud Grid Row with Drag & Drop Reordering) */}
       <div className="divide-y divide-white/[0.04]">
-        {columns.map((col) => (
-          <div
-            key={col.id}
-            className="px-2 py-0.5 flex items-center gap-0.5 hover:bg-white/[0.04] group/col transition-colors text-white"
-          >
-            {/* Key Indicators (PK / FK) */}
-            <div className="w-7 shrink-0 flex items-center justify-center gap-0.5 nodrag">
-              <button
-                onClick={() => onUpdateColumn(table.id, col.id, { isPk: !col.isPk })}
-                className={`p-0.5 rounded transition-all ${
-                  col.isPk
-                    ? 'text-amber-300 bg-amber-400/20 border border-amber-400/40 shadow-sm'
-                    : 'text-neutral-600 hover:text-neutral-400 opacity-25 hover:opacity-100'
-                }`}
-                title="기본키 (Primary Key) 설정/해제"
+        {columns.map((col, index) => {
+          const isDragTarget = dragOverColId === col.id;
+          const isBeingDragged = draggedColId === col.id;
+
+          return (
+            <div
+              key={col.id}
+              draggable
+              onDragStart={(e) => handleDragStart(e, col.id)}
+              onDragOver={(e) => handleDragOver(e, col.id)}
+              onDrop={(e) => handleDrop(e, col.id)}
+              onDragEnd={handleDragEnd}
+              onDoubleClick={(e) => e.stopPropagation()}
+              className={`px-2 py-0.5 flex items-center gap-0.5 hover:bg-white/[0.04] group/col transition-colors text-white relative ${
+                isBeingDragged ? 'opacity-30 bg-emerald-950/40' : ''
+              } ${
+                isDragTarget && dragOverPosition === 'above'
+                  ? 'border-t-2 !border-t-emerald-400'
+                  : isDragTarget && dragOverPosition === 'below'
+                  ? 'border-b-2 !border-b-emerald-400'
+                  : ''
+              }`}
+            >
+              {/* Drag Handle */}
+              <div
+                className="w-4 shrink-0 flex items-center justify-center text-neutral-600 hover:text-emerald-300 cursor-grab active:cursor-grabbing nodrag select-none"
+                title="드래그하여 순서 변경"
               >
-                <Key className="w-3 h-3" />
-              </button>
+                <GripVertical className="w-3.5 h-3.5" />
+              </div>
 
-              {col.isFk && (
-                <span
-                  className="text-sky-300 font-bold text-[8px] bg-sky-500/20 px-0.5 rounded border border-sky-400/30 cursor-default"
-                  title="외래키 (Foreign Key)"
+              {/* Key Indicators (PK / FK) */}
+              <div className="w-7 shrink-0 flex items-center justify-center gap-0.5 nodrag">
+                <button
+                  onClick={() => onUpdateColumn(table.id, col.id, { isPk: !col.isPk })}
+                  className={`p-0.5 rounded transition-all ${
+                    col.isPk
+                      ? 'text-amber-300 bg-amber-400/20 border border-amber-400/40 shadow-sm'
+                      : 'text-neutral-600 hover:text-neutral-400 opacity-25 hover:opacity-100'
+                  }`}
+                  title="기본키 (Primary Key) 설정/해제"
                 >
-                  FK
-                </span>
-              )}
-            </div>
+                  <Key className="w-3 h-3" />
+                </button>
 
-            {/* Logical Name (논리명) */}
-            {displayMode !== 'physical' && (
-              <div className="w-28 shrink-0 nodrag px-0.5">
-                <ColumnInput
-                  key={`logic_${col.id}`}
-                  initialValue={col.logicalName}
-                  placeholder="논리명"
-                  className="bg-transparent text-white/95 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-medium truncate"
-                  onCommit={(val) => onUpdateColumn(table.id, col.id, { logicalName: val })}
-                  onEnterPress={() => onAddColumn(table.id)}
-                />
-              </div>
-            )}
-
-            {/* Physical Name (물리명) */}
-            {displayMode !== 'logical' && (
-              <div className="w-28 shrink-0 nodrag px-0.5">
-                <ColumnInput
-                  key={`phys_${col.id}`}
-                  initialValue={col.physicalName}
-                  placeholder="물리명"
-                  className="bg-transparent text-white focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-semibold font-mono truncate"
-                  onCommit={(val) => onUpdateColumn(table.id, col.id, { physicalName: val })}
-                  onEnterPress={() => onAddColumn(table.id)}
-                />
-              </div>
-            )}
-
-            {/* Domain (도메인 값/설명 & 자동완성 드롭다운) */}
-            <div className="w-32 shrink-0 relative nodrag px-0.5">
-              <div className="flex items-center bg-transparent rounded border border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40">
-                <ColumnInput
-                  key={`domain_${col.id}`}
-                  initialValue={col.domain}
-                  placeholder="Domain"
-                  className="bg-transparent text-emerald-200/90 placeholder:text-neutral-500/60 px-1 py-0.5 outline-none w-full text-[10.5px] italic truncate"
-                  onCommit={(val) => onUpdateColumn(table.id, col.id, { domain: val })}
-                  onEnterPress={() => onAddColumn(table.id)}
-                  onFocus={() => {
-                    if (domains.length > 0) {
-                      setActiveDomainDropdown(col.id);
-                    }
-                  }}
-                />
-                {domains.length > 0 && (
-                  <button
-                    onClick={() =>
-                      setActiveDomainDropdown(activeDomainDropdown === col.id ? null : col.id)
-                    }
-                    className="text-neutral-500 hover:text-emerald-300 p-0.5 transition-colors shrink-0"
-                    title="도메인 목록에서 선택"
+                {col.isFk && (
+                  <span
+                    className="text-sky-300 font-bold text-[8px] bg-sky-500/20 px-0.5 rounded border border-sky-400/30 cursor-default"
+                    title="외래키 (Foreign Key)"
                   >
-                    <ChevronDown className="w-2.5 h-2.5" />
-                  </button>
+                    FK
+                  </span>
                 )}
               </div>
 
-              {/* Domain Autocomplete Dropdown */}
-              {activeDomainDropdown === col.id && domains.length > 0 && (
+              {/* Logical Name (논리명) */}
+              {displayMode !== 'physical' && (
                 <div
-                  ref={domainDropdownRef}
-                  onWheel={(e) => e.stopPropagation()}
-                  className="nowheel nodrag absolute left-0 top-7 z-50 bg-[#162219] border border-emerald-500/40 rounded-lg shadow-2xl py-1 w-48 max-h-52 overflow-y-auto backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+                  style={{ width: `${getWidth('logicalName')}px` }}
+                  className="shrink-0 nodrag px-0.5"
                 >
-                  <div className="px-2.5 py-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider border-b border-white/10 mb-1 flex items-center justify-between">
-                    <span>도메인 선택 (자동 완성)</span>
-                    <span className="text-neutral-400 font-normal">{domains.length}개</span>
-                  </div>
-                  {domains.map((dom) => (
-                    <button
-                      key={dom.id}
-                      onClick={() => {
-                        const match = dom.dataType.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
-                        const nextType = match
-                          ? { name: match[1], length: match[2] ? parseInt(match[2], 10) : undefined }
-                          : { name: dom.dataType };
-                        onUpdateColumn(table.id, col.id, {
-                          domain: dom.name,
-                          domainId: dom.id,
-                          type: nextType,
-                          defaultExpression: dom.defaultValue !== undefined && dom.defaultValue !== '' ? dom.defaultValue : col.defaultExpression,
-                        });
-                        setActiveDomainDropdown(null);
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-emerald-600 hover:text-white transition-colors flex flex-col gap-0.5 border-b border-white/[0.04] last:border-0"
-                    >
-                      <div className="font-semibold text-neutral-100 flex items-center justify-between">
-                        <span className="truncate">{dom.name}</span>
-                        {col.domain === dom.name && (
-                          <span className="text-[10px] text-emerald-300">✓</span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-[9.5px] font-mono text-emerald-300/80">
-                        <span>{dom.dataType}</span>
-                        {dom.defaultValue && (
-                          <span className="text-amber-300/80">def: {dom.defaultValue}</span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
+                  <ColumnInput
+                    key={`logic_${col.id}`}
+                    initialValue={col.logicalName}
+                    placeholder="논리명"
+                    className="bg-transparent text-white/95 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-medium"
+                    onCommit={(val) => onUpdateColumn(table.id, col.id, { logicalName: val })}
+                    onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                  />
                 </div>
               )}
-            </div>
 
-            {/* Data Type & Dropdown */}
-            <div className="w-28 shrink-0 relative nodrag px-0.5">
-              <div className="flex items-center bg-transparent rounded border border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40">
-                <input
-                  type="text"
-                  className="bg-transparent text-emerald-300 px-1 py-0.5 outline-none w-full text-[10.5px] font-mono lowercase"
-                  value={
-                    col.type.name
-                      ? `${col.type.name.toLowerCase()}${col.type.length ? `(${col.type.length})` : ''}`
-                      : ''
-                  }
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    const match = val.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
-                    if (match) {
-                      onUpdateColumn(table.id, col.id, {
-                        type: {
-                          name: match[1],
-                          length: match[2] ? parseInt(match[2], 10) : undefined,
-                        },
-                      });
-                    } else {
-                      onUpdateColumn(table.id, col.id, {
-                        type: { name: val },
-                      });
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') onAddColumn(table.id);
-                  }}
-                />
-                <button
-                  onClick={() =>
-                    setActiveTypeDropdown(activeTypeDropdown === col.id ? null : col.id)
-                  }
-                  className="text-neutral-400 hover:text-white p-0.5 transition-colors shrink-0"
-                  title="타입 선택"
+              {/* Physical Name (물리명) */}
+              {displayMode !== 'logical' && (
+                <div
+                  style={{ width: `${getWidth('physicalName')}px` }}
+                  className="shrink-0 nodrag px-0.5"
                 >
-                  <ChevronDown className="w-3 h-3" />
+                  <ColumnInput
+                    key={`phys_${col.id}`}
+                    initialValue={col.physicalName}
+                    placeholder="물리명"
+                    className="bg-transparent text-white focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-semibold font-mono"
+                    onCommit={(val) => onUpdateColumn(table.id, col.id, { physicalName: val })}
+                    onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                  />
+                </div>
+              )}
+
+              {/* Domain (도메인 값/설명 & 자동완성 드롭다운) */}
+              <div
+                style={{ width: `${getWidth('domain')}px` }}
+                className="shrink-0 relative nodrag px-0.5"
+              >
+                <div className="flex items-center bg-transparent rounded border border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40">
+                  <ColumnInput
+                    key={`domain_${col.id}`}
+                    initialValue={col.domain}
+                    placeholder="Domain"
+                    className="bg-transparent text-emerald-200/90 placeholder:text-neutral-500/60 px-1 py-0.5 outline-none w-full text-[10.5px] italic"
+                    onCommit={(val) => onUpdateColumn(table.id, col.id, { domain: val })}
+                    onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                    onFocus={() => {
+                      if (domains.length > 0) {
+                        setActiveDomainDropdown(col.id);
+                      }
+                    }}
+                  />
+                  {domains.length > 0 && (
+                    <button
+                      onClick={() =>
+                        setActiveDomainDropdown(activeDomainDropdown === col.id ? null : col.id)
+                      }
+                      className="text-neutral-500 hover:text-emerald-300 p-0.5 transition-colors shrink-0"
+                      title="도메인 목록에서 선택"
+                    >
+                      <ChevronDown className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Domain Autocomplete Dropdown */}
+                {activeDomainDropdown === col.id && domains.length > 0 && (
+                  <div
+                    ref={domainDropdownRef}
+                    onWheel={(e) => e.stopPropagation()}
+                    className="nowheel nodrag absolute left-0 top-7 z-50 bg-[#162219] border border-emerald-500/40 rounded-lg shadow-2xl py-1 w-48 max-h-52 overflow-y-auto backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+                  >
+                    <div className="px-2.5 py-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider border-b border-white/10 mb-1 flex items-center justify-between">
+                      <span>도메인 선택 (자동 완성)</span>
+                      <span className="text-neutral-400 font-normal">{domains.length}개</span>
+                    </div>
+                    {domains.map((dom) => (
+                      <button
+                        key={dom.id}
+                        onClick={() => {
+                          const match = dom.dataType.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
+                          const nextType = match
+                            ? { name: match[1], length: match[2] ? parseInt(match[2], 10) : undefined }
+                            : { name: dom.dataType };
+                          onUpdateColumn(table.id, col.id, {
+                            domain: dom.name,
+                            domainId: dom.id,
+                            type: nextType,
+                            defaultExpression: dom.defaultValue !== undefined && dom.defaultValue !== '' ? dom.defaultValue : col.defaultExpression,
+                          });
+                          setActiveDomainDropdown(null);
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 text-[11px] hover:bg-emerald-600 hover:text-white transition-colors flex flex-col gap-0.5 border-b border-white/[0.04] last:border-0"
+                      >
+                        <div className="font-semibold text-neutral-100 flex items-center justify-between">
+                          <span className="truncate">{dom.name}</span>
+                          {col.domain === dom.name && (
+                            <span className="text-[10px] text-emerald-300">✓</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[9.5px] font-mono text-emerald-300/80">
+                          <span>{dom.dataType}</span>
+                          {dom.defaultValue && (
+                            <span className="text-amber-300/80">def: {dom.defaultValue}</span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Data Type & Dropdown */}
+              <div
+                style={{ width: `${getWidth('type')}px` }}
+                className="shrink-0 relative nodrag px-0.5"
+              >
+                <div className="flex items-center bg-transparent rounded border border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40">
+                  <input
+                    type="text"
+                    className="bg-transparent text-emerald-300 px-1 py-0.5 outline-none w-full text-[10.5px] font-mono lowercase"
+                    value={
+                      col.type.name
+                        ? `${col.type.name.toLowerCase()}${col.type.length ? `(${col.type.length})` : ''}`
+                        : ''
+                    }
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const match = val.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
+                      if (match) {
+                        onUpdateColumn(table.id, col.id, {
+                          type: {
+                            name: match[1],
+                            length: match[2] ? parseInt(match[2], 10) : undefined,
+                          },
+                        });
+                      } else {
+                        onUpdateColumn(table.id, col.id, {
+                          type: { name: val },
+                        });
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') onAddColumn(table.id, undefined, index + 1);
+                    }}
+                  />
+                  <button
+                    onClick={() =>
+                      setActiveTypeDropdown(activeTypeDropdown === col.id ? null : col.id)
+                    }
+                    className="text-neutral-400 hover:text-white p-0.5 transition-colors shrink-0"
+                    title="타입 선택"
+                  >
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {/* Type Dropdown Menu (Scrollable & Outside Click Closeable) */}
+                {activeTypeDropdown === col.id && (
+                  <div
+                    ref={dropdownRef}
+                    onWheel={(e) => e.stopPropagation()}
+                    className="nowheel nodrag absolute left-0 top-7 z-50 bg-[#1a231d] border border-emerald-500/40 rounded-lg shadow-2xl py-1.5 w-36 max-h-52 overflow-y-auto backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+                  >
+                    <div className="px-2 py-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider border-b border-white/10 mb-1">
+                      데이터 타입 선택
+                    </div>
+                    {COMMON_DATA_TYPES.map((dt) => (
+                      <button
+                        key={dt}
+                        onClick={() => {
+                          const match = dt.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
+                          if (match) {
+                            onUpdateColumn(table.id, col.id, {
+                              type: {
+                                name: match[1],
+                                length: match[2] ? parseInt(match[2], 10) : undefined,
+                              },
+                            });
+                          }
+                          setActiveTypeDropdown(null);
+                        }}
+                        className="w-full text-left px-2.5 py-1 text-[11px] font-mono text-neutral-200 hover:bg-emerald-600 hover:text-white transition-colors flex items-center justify-between"
+                      >
+                        <span>{dt}</span>
+                        {col.type.name?.toLowerCase() === dt.toLowerCase() && (
+                          <span className="text-[10px] text-emerald-300">✓</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* NOT NULL / NULL Toggle */}
+              <div className="w-16 shrink-0 text-center nodrag px-0.5">
+                <button
+                  onClick={() => onUpdateColumn(table.id, col.id, { nullable: !col.nullable })}
+                  className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded font-bold transition-all ${
+                    !col.nullable
+                      ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-500/30'
+                      : 'text-neutral-400 hover:text-neutral-200'
+                  }`}
+                  title={col.nullable ? 'NULL 허용' : 'NOT NULL (필수)'}
+                >
+                  {col.nullable ? 'NULL' : 'NOT NULL'}
                 </button>
               </div>
 
-              {/* Type Dropdown Menu (Scrollable & Outside Click Closeable) */}
-              {activeTypeDropdown === col.id && (
-                <div
-                  ref={dropdownRef}
-                  onWheel={(e) => e.stopPropagation()}
-                  className="nowheel nodrag absolute left-0 top-7 z-50 bg-[#1a231d] border border-emerald-500/40 rounded-lg shadow-2xl py-1.5 w-36 max-h-52 overflow-y-auto backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
+              {/* Default Value */}
+              <div
+                style={{ width: `${getWidth('defaultValue')}px` }}
+                className="shrink-0 nodrag px-0.5"
+              >
+                <ColumnInput
+                  key={`def_${col.id}`}
+                  initialValue={col.defaultExpression}
+                  placeholder="Default value"
+                  className="bg-transparent text-amber-200/90 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px] font-mono"
+                  onCommit={(val) => onUpdateColumn(table.id, col.id, { defaultExpression: val })}
+                  onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                />
+              </div>
+
+              {/* Comment */}
+              <div
+                style={{ width: `${getWidth('comment')}px` }}
+                className="shrink-0 nodrag px-0.5"
+              >
+                <ColumnInput
+                  key={`cmt_${col.id}`}
+                  initialValue={col.comment}
+                  placeholder="Comment"
+                  className="bg-transparent text-neutral-300 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px]"
+                  onCommit={(val) => onUpdateColumn(table.id, col.id, { comment: val })}
+                  onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                />
+              </div>
+
+              {/* Action Buttons: Move Up, Move Down, Insert Below, Delete */}
+              <div className="w-14 shrink-0 nodrag flex items-center justify-end gap-0.5 opacity-0 group-hover/col:opacity-100 transition-opacity">
+                {/* Move Up */}
+                <button
+                  disabled={index === 0}
+                  onClick={() => handleMove(col.id, 'up')}
+                  className={`p-0.5 rounded transition-colors ${
+                    index === 0
+                      ? 'text-neutral-700 cursor-not-allowed'
+                      : 'text-neutral-400 hover:text-emerald-300 hover:bg-white/10'
+                  }`}
+                  title="위로 이동"
                 >
-                  <div className="px-2 py-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider border-b border-white/10 mb-1">
-                    데이터 타입 선택
-                  </div>
-                  {COMMON_DATA_TYPES.map((dt) => (
-                    <button
-                      key={dt}
-                      onClick={() => {
-                        const match = dt.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
-                        if (match) {
-                          onUpdateColumn(table.id, col.id, {
-                            type: {
-                              name: match[1],
-                              length: match[2] ? parseInt(match[2], 10) : undefined,
-                            },
-                          });
-                        }
-                        setActiveTypeDropdown(null);
-                      }}
-                      className="w-full text-left px-2.5 py-1 text-[11px] font-mono text-neutral-200 hover:bg-emerald-600 hover:text-white transition-colors flex items-center justify-between"
-                    >
-                      <span>{dt}</span>
-                      {col.type.name?.toLowerCase() === dt.toLowerCase() && (
-                        <span className="text-[10px] text-emerald-300">✓</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                  <ChevronUp className="w-3 h-3" />
+                </button>
 
-            {/* NOT NULL / NULL Toggle */}
-            <div className="w-16 shrink-0 text-center nodrag px-0.5">
-              <button
-                onClick={() => onUpdateColumn(table.id, col.id, { nullable: !col.nullable })}
-                className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded font-bold transition-all ${
-                  !col.nullable
-                    ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-500/30'
-                    : 'text-neutral-400 hover:text-neutral-200'
-                }`}
-                title={col.nullable ? 'NULL 허용' : 'NOT NULL (필수)'}
-              >
-                {col.nullable ? 'NULL' : 'NOT NULL'}
-              </button>
-            </div>
+                {/* Move Down */}
+                <button
+                  disabled={index === columns.length - 1}
+                  onClick={() => handleMove(col.id, 'down')}
+                  className={`p-0.5 rounded transition-colors ${
+                    index === columns.length - 1
+                      ? 'text-neutral-700 cursor-not-allowed'
+                      : 'text-neutral-400 hover:text-emerald-300 hover:bg-white/10'
+                  }`}
+                  title="아래로 이동"
+                >
+                  <ChevronDown className="w-3 h-3" />
+                </button>
 
-            {/* Default Value */}
-            <div className="w-24 shrink-0 nodrag px-0.5">
-              <ColumnInput
-                key={`def_${col.id}`}
-                initialValue={col.defaultExpression}
-                placeholder="Default value"
-                className="bg-transparent text-amber-200/90 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px] font-mono truncate"
-                onCommit={(val) => onUpdateColumn(table.id, col.id, { defaultExpression: val })}
-                onEnterPress={() => onAddColumn(table.id)}
-              />
-            </div>
+                {/* Insert Below */}
+                <button
+                  onClick={() => onAddColumn(table.id, undefined, index + 1)}
+                  className="p-0.5 text-neutral-400 hover:text-emerald-300 hover:bg-white/10 rounded transition-colors"
+                  title="이 위치 아래에 새 컬럼 삽입"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
 
-            {/* Comment */}
-            <div className="flex-1 min-w-[100px] nodrag px-0.5">
-              <ColumnInput
-                key={`cmt_${col.id}`}
-                initialValue={col.comment}
-                placeholder="Comment"
-                className="bg-transparent text-neutral-300 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px] truncate"
-                onCommit={(val) => onUpdateColumn(table.id, col.id, { comment: val })}
-                onEnterPress={() => onAddColumn(table.id)}
-              />
+                {/* Delete Column */}
+                <button
+                  onClick={() => onDeleteColumn(table.id, col.id)}
+                  className="p-0.5 text-neutral-400 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors"
+                  title="컬럼 삭제"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
             </div>
-
-            {/* Delete Column Button */}
-            <div className="w-4 shrink-0 nodrag flex items-center justify-center">
-              <button
-                onClick={() => onDeleteColumn(table.id, col.id)}
-                className="p-0.5 text-neutral-500 hover:text-rose-400 opacity-0 group-hover/col:opacity-100 transition-all"
-                title="컬럼 삭제"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* Quick Add Row Button */}
+      {/* Quick Add Row Button to bottom */}
       <button
         onClick={() => onAddColumn(table.id)}
         className="w-full py-1 bg-[#16241a] hover:bg-[#1f3325] text-neutral-300 hover:text-emerald-300 text-[10.5px] font-medium flex items-center justify-center gap-1 border-t border-emerald-900/30 rounded-b-lg transition-colors nodrag"

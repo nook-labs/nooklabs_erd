@@ -25,8 +25,10 @@ import { DomainModal } from '@/components/DomainModal';
 import { ValidationPanel } from '@/components/ValidationPanel';
 import { ShareModal } from '@/components/ShareModal';
 import { CanvasInspector, CanvasSettings } from '@/components/CanvasInspector';
+import { EntityListPanel } from '@/components/EntityListPanel';
 import {
   addTableAction,
+  deleteTableAction,
   addMemoAction,
   addRelationshipAction,
   updateProjectTitleAction,
@@ -75,6 +77,7 @@ export default function ProjectEditorPage() {
   const [isValidationOpen, setIsValidationOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
+  const [isEntityListOpen, setIsEntityListOpen] = useState(false);
 
   const reactFlowInstanceRef = useRef<any>(null);
 
@@ -143,53 +146,57 @@ export default function ProjectEditorPage() {
     });
     setManager(docMgr);
 
-    // Sync state from Yjs maps
+    // Sync state from Yjs maps safely with micro-batching
+    let syncRafId: number | null = null;
+
     const syncFromYjs = () => {
-      const tObj: Record<string, TableModel> = {};
-      docMgr.tablesMap.forEach((val, key) => {
-        tObj[key] = val;
+      if (syncRafId) cancelAnimationFrame(syncRafId);
+      syncRafId = requestAnimationFrame(() => {
+        const tObj: Record<string, TableModel> = {};
+        docMgr.tablesMap.forEach((val, key) => {
+          tObj[key] = val;
+        });
+        setTables(tObj);
+
+        const rObj: Record<string, RelationshipModel> = {};
+        docMgr.relationshipsMap.forEach((val, key) => {
+          rObj[key] = val;
+        });
+        setRelationships(rObj);
+
+        const nObj: Record<string, NodeView> = {};
+        docMgr.nodesMap.forEach((val, key) => {
+          nObj[key] = val;
+        });
+        setNodes(nObj);
+
+        const mObj: Record<string, MemoModel> = {};
+        docMgr.memosMap.forEach((val, key) => {
+          mObj[key] = val;
+        });
+        setMemos(mObj);
+
+        const dArr: DomainItem[] = [];
+        docMgr.domainsMap.forEach((val) => {
+          dArr.push(val);
+        });
+        setDomains(dArr);
+
+        const title = docMgr.metaMap.get('title');
+        if (title) setProjectTitle(title);
+
+        const savedBg = docMgr.metaMap.get('canvasBg');
+        const savedGrid = docMgr.metaMap.get('canvasGrid');
+        const savedZoomScale = docMgr.metaMap.get('canvasZoomScale');
+        if (savedBg || savedGrid || savedZoomScale !== undefined) {
+          setCanvasSettings((prev) => ({
+            ...prev,
+            backgroundColor: savedBg || prev.backgroundColor,
+            gridType: (savedGrid as any) || prev.gridType,
+            zoomLabelScale: typeof savedZoomScale === 'number' ? savedZoomScale : prev.zoomLabelScale,
+          }));
+        }
       });
-      setTables(tObj);
-
-      const rObj: Record<string, RelationshipModel> = {};
-      docMgr.relationshipsMap.forEach((val, key) => {
-        rObj[key] = val;
-      });
-      setRelationships(rObj);
-
-      const nObj: Record<string, NodeView> = {};
-      docMgr.nodesMap.forEach((val, key) => {
-        nObj[key] = val;
-      });
-      setNodes(nObj);
-
-      const mObj: Record<string, MemoModel> = {};
-      docMgr.memosMap.forEach((val, key) => {
-        mObj[key] = val;
-      });
-      setMemos(mObj);
-
-      const dArr: DomainItem[] = [];
-      docMgr.domainsMap.forEach((val) => {
-        dArr.push(val);
-      });
-      setDomains(dArr);
-
-      const title = docMgr.metaMap.get('title');
-      if (title) setProjectTitle(title);
-
-      const savedBg = docMgr.metaMap.get('canvasBg');
-      const savedGrid = docMgr.metaMap.get('canvasGrid');
-      const savedZoomScale = docMgr.metaMap.get('canvasZoomScale');
-      if (savedBg || savedGrid || savedZoomScale !== undefined) {
-        setCanvasSettings((prev) => ({
-          ...prev,
-          backgroundColor: savedBg || prev.backgroundColor,
-          gridType: (savedGrid as any) || prev.gridType,
-          zoomLabelScale: typeof savedZoomScale === 'number' ? savedZoomScale : prev.zoomLabelScale,
-        }));
-      }
-
     };
 
     docMgr.doc.on('update', syncFromYjs);
@@ -360,6 +367,46 @@ export default function ProjectEditorPage() {
     [manager, isReadOnly]
   );
 
+  const handleFocusTable = useCallback(
+    (tableId: string) => {
+      const rf = reactFlowInstanceRef.current;
+      if (!rf) return;
+
+      const rfNode = rf.getNode(tableId);
+      const nodeView = nodes[tableId];
+
+      const x = rfNode?.position?.x ?? nodeView?.position?.x ?? 0;
+      const y = rfNode?.position?.y ?? nodeView?.position?.y ?? 0;
+
+      // 실제 렌더링된 테이블의 너비와 높이 측정값 사용
+      const width = rfNode?.measured?.width || rfNode?.width || nodeView?.position?.width || 480;
+      const height = rfNode?.measured?.height || rfNode?.height || nodeView?.position?.height || 260;
+
+      const targetZoom = 1.05;
+
+      // 테이블 자체의 절대 중심 좌표
+      let centerX = x + width / 2;
+      let centerY = y + height / 2;
+
+      // 우측 사이드 패널(EntityListPanel / Inspector)이 열려 있는 경우, 가려지지 않은 뷰포트 영역의 중앙으로 시야 보정
+      if (isEntityListOpen || isInspectorOpen) {
+        const panelWidth = 360; // 사이드 패널 너비
+        centerX += (panelWidth / 2) / targetZoom;
+      }
+
+      rf.setCenter(centerX, centerY, { zoom: targetZoom, duration: 600 });
+    },
+    [nodes, isEntityListOpen, isInspectorOpen]
+  );
+
+  const handleDeleteTable = useCallback(
+    (tableId: string) => {
+      if (!manager || isReadOnly) return;
+      deleteTableAction(manager, tableId);
+    },
+    [manager, isReadOnly]
+  );
+
   // Keyboard Shortcuts (Improved: Shift+T for safe table creation to prevent misclicks)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -378,6 +425,7 @@ export default function ProjectEditorPage() {
       } else if (e.key === 'Escape') {
         setActiveTool('select');
         setIsInspectorOpen(false);
+        setIsEntityListOpen(false);
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !isReadOnly) {
         e.preventDefault();
         manager?.undoManager.undo();
@@ -420,6 +468,9 @@ export default function ProjectEditorPage() {
         memberCount={mockStore.getMembers(project.id).length}
         onToggleInspector={() => setIsInspectorOpen((prev) => !prev)}
         isInspectorOpen={isInspectorOpen}
+        onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
+        isEntityListOpen={isEntityListOpen}
+        tableCount={Object.keys(tables).length}
       />
 
       {/* Center Layout: Sidebar + Canvas + Inspector */}
@@ -436,6 +487,8 @@ export default function ProjectEditorPage() {
           onZoomIn={() => reactFlowInstanceRef.current?.zoomIn({ duration: 300 })}
           onZoomOut={() => reactFlowInstanceRef.current?.zoomOut({ duration: 300 })}
           onFitView={() => reactFlowInstanceRef.current?.fitView({ duration: 500 })}
+          onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
+          isEntityListOpen={isEntityListOpen}
         />
 
         {/* Main Canvas Area */}
@@ -454,6 +507,18 @@ export default function ProjectEditorPage() {
             isMiniMapOpen={isMiniMapOpen}
             reactFlowInstanceRef={reactFlowInstanceRef}
             canvasSettings={canvasSettings}
+          />
+
+          {/* ERD Cloud Style ENTITY List Panel */}
+          <EntityListPanel
+            isOpen={isEntityListOpen}
+            onClose={() => setIsEntityListOpen(false)}
+            tables={tables}
+            nodes={nodes}
+            onFocusTable={handleFocusTable}
+            onDeleteTable={handleDeleteTable}
+            onAddTable={handleAddTable}
+            isReadOnly={isReadOnly}
           />
 
           {/* Figma Right Inspector Panel (Page Background, Grid, Schema Stats) */}

@@ -157,7 +157,8 @@ export function deleteTableAction(manager: ERDDocManager, tableId: string) {
 export function addColumnAction(
   manager: ERDDocManager,
   tableId: string,
-  columnData?: Partial<ColumnModel>
+  columnData?: Partial<ColumnModel>,
+  insertIndex?: number
 ): string | null {
   const table = manager.tablesMap.get(tableId);
   if (!table) return null;
@@ -171,9 +172,16 @@ export function addColumnAction(
     ...columnData,
   };
 
+  const newColumnOrder = [...table.columnOrder];
+  if (insertIndex !== undefined && insertIndex >= 0 && insertIndex <= newColumnOrder.length) {
+    newColumnOrder.splice(insertIndex, 0, newCol.id);
+  } else {
+    newColumnOrder.push(newCol.id);
+  }
+
   const updatedTable: TableModel = {
     ...table,
-    columnOrder: [...table.columnOrder, newCol.id],
+    columnOrder: newColumnOrder,
     columnsById: {
       ...table.columnsById,
       [newCol.id]: newCol,
@@ -185,6 +193,53 @@ export function addColumnAction(
   }, manager.doc.clientID);
 
   return newCol.id;
+}
+
+export function reorderColumnsAction(
+  manager: ERDDocManager,
+  tableId: string,
+  newColumnOrder: string[]
+) {
+  const table = manager.tablesMap.get(tableId);
+  if (!table) return;
+
+  const updatedTable: TableModel = {
+    ...table,
+    columnOrder: newColumnOrder,
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(tableId, updatedTable);
+  }, manager.doc.clientID);
+}
+
+export function moveColumnAction(
+  manager: ERDDocManager,
+  tableId: string,
+  columnId: string,
+  direction: 'up' | 'down'
+) {
+  const table = manager.tablesMap.get(tableId);
+  if (!table) return;
+
+  const idx = table.columnOrder.indexOf(columnId);
+  if (idx === -1) return;
+
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (targetIdx < 0 || targetIdx >= table.columnOrder.length) return;
+
+  const nextOrder = [...table.columnOrder];
+  const [removed] = nextOrder.splice(idx, 1);
+  nextOrder.splice(targetIdx, 0, removed);
+
+  const updatedTable: TableModel = {
+    ...table,
+    columnOrder: nextOrder,
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(tableId, updatedTable);
+  }, manager.doc.clientID);
 }
 
 export function updateColumnAction(

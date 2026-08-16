@@ -10,6 +10,7 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
+  ListTree,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -23,6 +24,8 @@ interface SidebarProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFitView: () => void;
+  onToggleEntityList?: () => void;
+  isEntityListOpen?: boolean;
 }
 
 // 7 Types of Crow's Foot Icons with Figma Clean Precision
@@ -120,6 +123,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onZoomIn,
   onZoomOut,
   onFitView,
+  onToggleEntityList,
+  isEntityListOpen = false,
 }) => {
   return (
     <aside className="w-9 sm:w-10 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-2 gap-1 z-30 select-none overflow-y-auto shrink-0">
@@ -144,6 +149,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <Table2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
       </button>
+
+      {/* 2.5 Entity List Toggle */}
+      {onToggleEntityList && (
+        <button
+          onClick={onToggleEntityList}
+          className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded transition-all ${
+            isEntityListOpen
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
+          }`}
+          title="엔티티 목록 (ENTITY)"
+        >
+          <ListTree className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        </button>
+      )}
 
       {/* 3. Add Memo / Document */}
       <button
