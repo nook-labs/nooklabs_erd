@@ -1,9 +1,11 @@
 import { Project, ProjectMember, ProjectInvitation, UserProfile, ProjectRole } from './types';
+import { ProjectVersion, ERDSnapshot } from '@/types/erd';
 
 const MOCK_USER_STORAGE_KEY = 'nooklabs_mock_user';
 const MOCK_PROJECTS_STORAGE_KEY = 'nooklabs_mock_projects';
 const MOCK_MEMBERS_STORAGE_KEY = 'nooklabs_mock_members';
 const MOCK_INVITES_STORAGE_KEY = 'nooklabs_mock_invites';
+const MOCK_VERSIONS_STORAGE_KEY = 'nooklabs_mock_versions';
 
 export const DEFAULT_MOCK_USER: UserProfile = {
   id: 'usr_dev_1001',
@@ -203,5 +205,50 @@ export const mockStore = {
     setStored(MOCK_INVITES_STORAGE_KEY, allInvites);
     this.addMember(invite.project_id, userId, invite.role, invite.invited_by);
     return true;
+  },
+
+  // Versions / Snapshots
+  getVersions(projectId: string): ProjectVersion[] {
+    const allVersions = getStored<ProjectVersion[]>(MOCK_VERSIONS_STORAGE_KEY, []);
+    return allVersions
+      .filter((v) => v.projectId === projectId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  },
+
+  createVersion(
+    projectId: string,
+    name: string,
+    snapshot: ERDSnapshot,
+    createdBy: string,
+    creatorName: string = '사용자',
+    description?: string,
+    isAutoSnapshot: boolean = false
+  ): ProjectVersion {
+    const allVersions = getStored<ProjectVersion[]>(MOCK_VERSIONS_STORAGE_KEY, []);
+    const tableCount = Object.keys(snapshot.tables || {}).length;
+    const relationshipCount = Object.keys(snapshot.relationships || {}).length;
+
+    const newVersion: ProjectVersion = {
+      id: 'ver_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+      projectId,
+      name,
+      description,
+      snapshot,
+      tableCount,
+      relationshipCount,
+      createdBy,
+      creatorName,
+      createdAt: new Date().toISOString(),
+      isAutoSnapshot,
+    };
+
+    setStored(MOCK_VERSIONS_STORAGE_KEY, [newVersion, ...allVersions]);
+    return newVersion;
+  },
+
+  deleteVersion(versionId: string): void {
+    const allVersions = getStored<ProjectVersion[]>(MOCK_VERSIONS_STORAGE_KEY, []);
+    const updated = allVersions.filter((v) => v.id !== versionId);
+    setStored(MOCK_VERSIONS_STORAGE_KEY, updated);
   },
 };

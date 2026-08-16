@@ -501,6 +501,9 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           {displayMode === 'both' && table.logicalName && (
             <span className="text-emerald-300 text-xs font-bold">({table.logicalName})</span>
           )}
+          <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
+            {columns.length} cols
+          </span>
         </div>
       )}
 
@@ -617,6 +620,11 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
               ) : (
                 <span className="tracking-tight font-extrabold text-white text-[13px]">{table.physicalName}</span>
               )}
+
+              {/* Table Total Column/Row Count Badge */}
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/30 border border-white/20 text-white/90 shadow-sm shrink-0">
+                {columns.length} cols
+              </span>
             </div>
           )}
         </div>
@@ -681,7 +689,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
       {/* ERD Cloud Style Columns Table Header (Excel-like Resizable) */}
       <div className="bg-[#193223]/90 px-2 py-1 text-[10px] text-emerald-300/80 border-b border-emerald-900/40 flex items-center font-mono tracking-tight select-none">
         {/* Grip Handle & KEY Header */}
-        <div className="w-4 shrink-0 text-center font-bold text-emerald-600/60">#</div>
+        <div className="w-8 shrink-0 text-center font-bold text-emerald-400">#</div>
         <div className="w-7 shrink-0 text-center font-bold text-emerald-400">KEY</div>
         
         {displayMode !== 'physical' && (
@@ -767,12 +775,13 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                   : ''
               }`}
             >
-              {/* Drag Handle */}
+              {/* Excel-like Row Number (1, 2, 3...) & Drag Handle on Hover */}
               <div
-                className="w-4 shrink-0 flex items-center justify-center text-neutral-600 hover:text-emerald-300 cursor-grab active:cursor-grabbing nodrag select-none"
-                title="드래그하여 순서 변경"
+                className="w-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold text-neutral-400 group-hover/col:text-emerald-300 cursor-grab active:cursor-grabbing nodrag select-none"
+                title={`${index + 1}번째 행 (드래그하여 순서 변경)`}
               >
-                <GripVertical className="w-3.5 h-3.5" />
+                <span className="group-hover/col:hidden">{index + 1}</span>
+                <GripVertical className="w-3.5 h-3.5 hidden group-hover/col:block text-emerald-400" />
               </div>
 
               {/* Key Indicators (PK / FK) */}
@@ -1095,9 +1104,10 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
       {/* Quick Add Row Button to bottom */}
       <button
         onClick={() => onAddColumn(table.id)}
-        className="w-full py-1 bg-[#16241a] hover:bg-[#1f3325] text-neutral-300 hover:text-emerald-300 text-[10.5px] font-medium flex items-center justify-center gap-1 border-t border-emerald-900/30 rounded-b-lg transition-colors nodrag"
+        className="w-full py-1 bg-[#16241a] hover:bg-[#1f3325] text-neutral-300 hover:text-emerald-300 text-[10.5px] font-medium flex items-center justify-center gap-1.5 border-t border-emerald-900/30 rounded-b-lg transition-colors nodrag"
       >
         <Plus className="w-3 h-3 text-emerald-400" /> 컬럼 추가 (Enter)
+        <span className="text-[10px] text-neutral-500 font-mono">({columns.length}행)</span>
       </button>
     </div>
   );

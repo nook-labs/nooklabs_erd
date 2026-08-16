@@ -15,6 +15,7 @@ import {
   DomainItem,
   DisplayMode,
   ActiveTool,
+  ProjectVersion,
 } from '@/types/erd';
 import { ERDCanvas } from '@/components/ERDCanvas';
 import { Sidebar } from '@/components/Sidebar';
@@ -26,6 +27,7 @@ import { ValidationPanel } from '@/components/ValidationPanel';
 import { ShareModal } from '@/components/ShareModal';
 import { CanvasInspector, CanvasSettings } from '@/components/CanvasInspector';
 import { EntityListPanel } from '@/components/EntityListPanel';
+import { VersionHistoryPanel } from '@/components/VersionHistoryPanel';
 import {
   addTableAction,
   deleteTableAction,
@@ -38,6 +40,10 @@ import {
   deleteDomainAction,
   syncDomainColumnsAction,
 } from '@/collaboration/actions';
+import {
+  captureCurrentSnapshot,
+  restoreVersionSnapshotAction,
+} from '@/collaboration/versionActions';
 import { validateSchema, ValidationIssue } from '@/validation/validator';
 import { Database } from 'lucide-react';
 
@@ -78,8 +84,50 @@ export default function ProjectEditorPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
   const [isEntityListOpen, setIsEntityListOpen] = useState(false);
+  const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
+  const [versions, setVersions] = useState<ProjectVersion[]>([]);
 
   const reactFlowInstanceRef = useRef<any>(null);
+
+  // Load version history
+  const loadVersions = useCallback(() => {
+    if (!projectId) return;
+    const vList = mockStore.getVersions(projectId);
+    setVersions(vList);
+  }, [projectId]);
+
+  useEffect(() => {
+    loadVersions();
+  }, [loadVersions]);
+
+  const handleCreateVersion = (name: string, description?: string) => {
+    if (!manager || !projectId || !user) return;
+    const snapshot = captureCurrentSnapshot(manager, projectTitle);
+    const creatorName = user.display_name || user.email || '사용자';
+    mockStore.createVersion(
+      projectId,
+      name,
+      snapshot,
+      user.id,
+      creatorName,
+      description,
+      false
+    );
+    loadVersions();
+  };
+
+  const handleRestoreVersion = (ver: ProjectVersion) => {
+    if (!manager || !ver.snapshot) return;
+    restoreVersionSnapshotAction(manager, ver.snapshot);
+    if (ver.snapshot.projectTitle) {
+      setProjectTitle(ver.snapshot.projectTitle);
+    }
+  };
+
+  const handleDeleteVersion = (versionId: string) => {
+    mockStore.deleteVersion(versionId);
+    loadVersions();
+  };
 
   // 1. Check Auth & Load Project
   useEffect(() => {
@@ -470,6 +518,9 @@ export default function ProjectEditorPage() {
         isInspectorOpen={isInspectorOpen}
         onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
         isEntityListOpen={isEntityListOpen}
+        onToggleVersionHistory={() => setIsVersionHistoryOpen((prev) => !prev)}
+        isVersionHistoryOpen={isVersionHistoryOpen}
+        versionCount={versions.length}
         tableCount={Object.keys(tables).length}
       />
 
@@ -519,6 +570,18 @@ export default function ProjectEditorPage() {
             onDeleteTable={handleDeleteTable}
             onAddTable={handleAddTable}
             isReadOnly={isReadOnly}
+          />
+
+          {/* Version History Slide-in Panel (Snapshots & Restore) */}
+          <VersionHistoryPanel
+            isOpen={isVersionHistoryOpen}
+            onClose={() => setIsVersionHistoryOpen(false)}
+            versions={versions}
+            onCreateVersion={handleCreateVersion}
+            onRestoreVersion={handleRestoreVersion}
+            onDeleteVersion={handleDeleteVersion}
+            currentTableCount={Object.keys(tables).length}
+            currentRelationshipCount={Object.keys(relationships).length}
           />
 
           {/* Figma Right Inspector Panel (Page Background, Grid, Schema Stats) */}

@@ -19,6 +19,7 @@ import {
   Eye,
   SlidersHorizontal,
   ListTree,
+  History,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -38,6 +39,9 @@ interface ToolbarProps {
   isInspectorOpen?: boolean;
   onToggleEntityList?: () => void;
   isEntityListOpen?: boolean;
+  onToggleVersionHistory?: () => void;
+  isVersionHistoryOpen?: boolean;
+  versionCount?: number;
   tableCount?: number;
 }
 
@@ -58,6 +62,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isInspectorOpen = false,
   onToggleEntityList,
   isEntityListOpen = false,
+  onToggleVersionHistory,
+  isVersionHistoryOpen = false,
+  versionCount = 0,
   tableCount = 0,
 }) => {
   const router = useRouter();
@@ -237,6 +244,25 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <ListTree className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="hidden sm:inline">엔티티</span>
             <span className="text-[10px] text-neutral-400">({tableCount})</span>
+          </button>
+        )}
+
+        {/* Version History Toggle Button */}
+        {onToggleVersionHistory && (
+          <button
+            onClick={onToggleVersionHistory}
+            className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap ${
+              isVersionHistoryOpen
+                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
+                : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
+            }`}
+            title="버전 기록 및 시점 저장 (Version History)"
+          >
+            <History className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline">버전 기록</span>
+            {versionCount > 0 && (
+              <span className="text-[10px] text-emerald-400 font-bold">({versionCount})</span>
+            )}
           </button>
         )}
 

@@ -149,3 +149,29 @@ export interface UserPresence {
   selectedColumnId?: string;
   editingCell?: { tableId: string; columnId?: string; field: string };
 }
+
+// Version History & Snapshots
+export interface ERDSnapshot {
+  tables: Record<string, TableModel>;
+  relationships: Record<string, RelationshipModel>;
+  nodes: Record<string, NodeView>;
+  memos: Record<string, MemoModel>;
+  domains: DomainItem[];
+  projectTitle?: string;
+  meta?: any;
+}
+
+export interface ProjectVersion {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  snapshot: ERDSnapshot;
+  tableCount: number;
+  relationshipCount: number;
+  createdBy: string;
+  creatorName?: string;
+  createdAt: string;
+  isAutoSnapshot?: boolean;
+}
+
