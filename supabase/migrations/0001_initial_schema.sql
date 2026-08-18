@@ -1,5 +1,6 @@
 -- ==============================================================================
--- NookLabs ERD - Supabase Schema & Row Level Security (RLS)
+-- Migration: 0001_initial_schema.sql
+-- Description: NookLabs ERD 초기 스키마 및 기본 RLS 설정
 -- ==============================================================================
 
 -- 1. Profiles Table (auth.users 확장 프로필)
@@ -140,17 +141,12 @@ CREATE POLICY "Profiles are viewable by authenticated users"
   TO authenticated
   USING (true);
 
-CREATE POLICY "Users can insert their own profile"
-  ON public.profiles FOR INSERT
-  TO authenticated
-  WITH CHECK (auth.uid() = id);
-
 CREATE POLICY "Users can update their own profile"
   ON public.profiles FOR UPDATE
   TO authenticated
   USING (auth.uid() = id);
 
--- 2. Projects RLS (서브쿼리 순환 참조 완전 제거)
+-- 2. Projects RLS
 CREATE POLICY "Projects viewable by authenticated users"
   ON public.projects FOR SELECT
   TO authenticated
@@ -171,7 +167,7 @@ CREATE POLICY "Owners can delete projects"
   TO authenticated
   USING (owner_id = auth.uid());
 
--- 3. Project Members RLS (서브쿼리 순환 참조 완전 제거)
+-- 3. Project Members RLS
 CREATE POLICY "Project members viewable by authenticated users"
   ON public.project_members FOR SELECT
   TO authenticated
@@ -182,7 +178,7 @@ CREATE POLICY "Project members manageable by authenticated users"
   TO authenticated
   USING (true);
 
--- 4. Project Invitations RLS (토큰 초대 링크 정상 조회 지원)
+-- 4. Project Invitations RLS
 CREATE POLICY "Invitations viewable by anyone with link"
   ON public.project_invitations FOR SELECT
   TO authenticated, anon
@@ -202,87 +198,3 @@ CREATE POLICY "Invitations deletable by authenticated users"
   ON public.project_invitations FOR DELETE
   TO authenticated
   USING (true);
-
--- 5. Project Documents RLS
-CREATE POLICY "Project documents viewable by authenticated users"
-  ON public.project_documents FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Project documents manageable by authenticated users"
-  ON public.project_documents FOR ALL
-  TO authenticated
-  USING (true);
-
--- 6. Project Snapshots RLS
-CREATE POLICY "Snapshots viewable by authenticated users"
-  ON public.project_snapshots FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Snapshots manageable by authenticated users"
-  ON public.project_snapshots FOR ALL
-  TO authenticated
-  USING (true);
-
--- 7. Project Assets RLS
-CREATE POLICY "Project assets viewable by authenticated users"
-  ON public.project_assets FOR SELECT
-  TO authenticated
-  USING (true);
-
-CREATE POLICY "Project assets manageable by authenticated users"
-  ON public.project_assets FOR ALL
-  TO authenticated
-  USING (true);
-
--- ==============================================================================
--- Realtime Publication 설정
--- ==============================================================================
-DO $$
-BEGIN
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.projects;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.project_members;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.project_invitations;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
-  BEGIN
-    ALTER PUBLICATION supabase_realtime ADD TABLE public.project_snapshots;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
-END $$;
-
--- ==============================================================================
--- Storage 버킷 설정
--- ==============================================================================
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('erd-assets', 'erd-assets', true)
-ON CONFLICT (id) DO NOTHING;
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname = 'Public Access for erd-assets'
-  ) THEN
-    CREATE POLICY "Public Access for erd-assets"
-      ON storage.objects FOR SELECT
-      TO public
-      USING (bucket_id = 'erd-assets');
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage' AND policyname = 'Authenticated users can upload to erd-assets'
-  ) THEN
-    CREATE POLICY "Authenticated users can upload to erd-assets"
-      ON storage.objects FOR INSERT
-      TO authenticated
-      WITH CHECK (bucket_id = 'erd-assets');
-  END IF;
-END $$;

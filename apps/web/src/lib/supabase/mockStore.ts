@@ -39,7 +39,7 @@ function setStored<T>(key: string, val: T): void {
 export const mockStore = {
   // Current User
   getCurrentUser(): UserProfile | null {
-    return getStored<UserProfile | null>(MOCK_USER_STORAGE_KEY, DEFAULT_MOCK_USER);
+    return getStored<UserProfile | null>(MOCK_USER_STORAGE_KEY, null);
   },
 
   setCurrentUser(user: UserProfile | null) {
@@ -141,9 +141,9 @@ export const mockStore = {
   getMembers(projectId: string): ProjectMember[] {
     const allMembers = getStored<ProjectMember[]>(MOCK_MEMBERS_STORAGE_KEY, []);
     const filtered = allMembers.filter((m) => m.project_id === projectId);
-    const currentUser = this.getCurrentUser() || DEFAULT_MOCK_USER;
+    const currentUser = this.getCurrentUser();
 
-    if (filtered.length === 0) {
+    if (filtered.length === 0 && currentUser) {
       const initial: ProjectMember = {
         id: 'mem-' + Math.random().toString(36).substring(2, 9),
         project_id: projectId,
@@ -168,8 +168,8 @@ export const mockStore = {
     if (!userProfile) {
       userProfile = {
         id: userId,
-        email: `${userId}@nooklabs.io`,
-        display_name: userId === 'usr_dev_1001' ? 'David Lee (Dev)' : `Member (${userId.slice(-4)})`,
+        email: `${userId.slice(0, 8)}@nooklabs.io`,
+        display_name: `Member (${userId.slice(-4)})`,
         avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${userId}`,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),

@@ -67,6 +67,7 @@ export default function ProjectEditorPage() {
   const [domains, setDomains] = useState<DomainItem[]>([]);
   const [projectTitle, setProjectTitle] = useState('프로젝트 ERD');
   const [onlineUsers, setOnlineUsers] = useState<OnlineUserInfo[]>([]);
+  const [registeredMemberCount, setRegisteredMemberCount] = useState<number>(1);
   const [displayMode, setDisplayModeState] = useState<DisplayMode>('physical');
 
   // Load saved DisplayMode from localStorage on mount
@@ -223,6 +224,19 @@ export default function ProjectEditorPage() {
                 }
               }
 
+              // 3. Count total registered members
+              try {
+                const { count: mCount } = await supabase
+                  .from('project_members')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('project_id', projectId);
+                if (mCount !== null && mCount !== undefined) {
+                  setRegisteredMemberCount(Math.max(mCount, 1));
+                }
+              } catch {
+                // fallback
+              }
+
               setMyRole(resolvedRole);
               return;
             }
@@ -245,6 +259,8 @@ export default function ProjectEditorPage() {
             mockStore.addMember(projectId, user.id, resolvedRole, proj.owner_id);
           }
           setMyRole(resolvedRole);
+          const updatedMembers = mockStore.getMembers(projectId);
+          setRegisteredMemberCount(Math.max(updatedMembers.length, 1));
         }
       };
 
@@ -609,7 +625,7 @@ export default function ProjectEditorPage() {
         isConnected={isWsConnected}
         userRole={myRole}
         onOpenShareModal={() => setIsShareModalOpen(true)}
-        memberCount={onlineUsers.length || 1}
+        memberCount={registeredMemberCount}
         onToggleInspector={() => setIsInspectorOpen((prev) => !prev)}
         isInspectorOpen={isInspectorOpen}
         onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
@@ -779,6 +795,7 @@ export default function ProjectEditorPage() {
           projectName={project.name}
           currentUser={user}
           myRole={myRole}
+          onMembersChange={setRegisteredMemberCount}
         />
       )}
     </div>

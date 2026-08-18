@@ -26,6 +26,7 @@ interface ShareModalProps {
   projectName: string;
   currentUser: UserProfile;
   myRole: ProjectRole;
+  onMembersChange?: (count: number) => void;
 }
 
 export const ShareModal: React.FC<ShareModalProps> = ({
@@ -35,6 +36,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   projectName,
   currentUser,
   myRole,
+  onMembersChange,
 }) => {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -51,23 +53,15 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const loadMembers = async () => {
     if (isSupabaseConfigured && supabase) {
       try {
-        // 1. Fetch project info to identify the owner
+        // 1. Fetch project owner_id
         const { data: projData } = await supabase
           .from('projects')
-          .select(`
-            owner_id,
-            owner:profiles (
-              id,
-              email,
-              display_name,
-              avatar_url
-            )
-          `)
+          .select('owner_id')
           .eq('id', projectId)
-          .single();
+          .maybeSingle();
 
-        // 2. Fetch all registered project members
-        const { data: memberRows, error } = await supabase
+        // 2. Fetch all registered project members with profile JOIN
+        const { data: memberRows, error: memberErr } = await supabase
           .from('project_members')
           .select(`
             id,
@@ -84,7 +78,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           `)
           .eq('project_id', projectId);
 
-        if (!error) {
+        if (!memberErr) {
           const list: ProjectMember[] = (memberRows || []).map((m: any) => ({
             id: m.id,
             project_id: m.project_id,
@@ -94,25 +88,37 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             joined_at: m.joined_at,
             profile: m.profile || {
               id: m.user_id,
-              email: `${m.user_id.slice(0, 8)}@nooklabs.io`,
-              display_name: 'Member',
-              avatar_url: null,
+              email: m.user_id === currentUser.id ? currentUser.email : `user_${m.user_id.slice(0, 6)}`,
+              display_name: m.user_id === currentUser.id ? currentUser.display_name : 'Member',
+              avatar_url: m.user_id === currentUser.id ? currentUser.avatar_url : null,
             },
           }));
 
-          // Ensure owner is always included at the top of the list
-          const hasOwner = list.some((m) => m.role === 'owner' || m.user_id === projData?.owner_id);
-          if (!hasOwner && projData?.owner_id) {
-            const ownerProfile = (projData as any).owner || {
-              id: projData.owner_id,
-              email: 'owner@nooklabs.io',
-              display_name: 'Owner',
+          const ownerId = projData?.owner_id;
+
+          // 3. Ensure owner is in the list
+          const hasOwner = list.some((m) => m.role === 'owner' || (ownerId && m.user_id === ownerId));
+          if (!hasOwner && ownerId) {
+            // Fetch owner profile directly from profiles table
+            const { data: ownerProf } = await supabase
+              .from('profiles')
+              .select('id, email, display_name, avatar_url, created_at, updated_at')
+              .eq('id', ownerId)
+              .maybeSingle();
+
+            const ownerProfile: UserProfile = ownerProf || {
+              id: ownerId,
+              email: ownerId === currentUser.id ? currentUser.email : 'owner',
+              display_name: ownerId === currentUser.id ? currentUser.display_name : 'Project Owner',
               avatar_url: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
             };
+
             list.unshift({
-              id: `mem_owner_${projData.owner_id}`,
+              id: `mem_owner_${ownerId}`,
               project_id: projectId,
-              user_id: projData.owner_id,
+              user_id: ownerId,
               role: 'owner',
               invited_by: null,
               joined_at: new Date().toISOString(),
@@ -120,7 +126,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             });
           }
 
-          // If current user is viewing and not yet in list, include current user
+          // 4. Ensure current user is in the list
           const hasCurrentUser = list.some((m) => m.user_id === currentUser.id);
           if (!hasCurrentUser) {
             list.push({
@@ -134,7 +140,20 @@ export const ShareModal: React.FC<ShareModalProps> = ({
             });
           }
 
-          setMembers(list);
+          // Remove any accidental duplicate user_ids, prioritizing owner role
+          const uniqueList: ProjectMember[] = [];
+          const seenUsers = new Set<string>();
+          // Sort to put owner first
+          list.sort((a, b) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : 0));
+          list.forEach((m) => {
+            if (!seenUsers.has(m.user_id)) {
+              seenUsers.add(m.user_id);
+              uniqueList.push(m);
+            }
+          });
+
+          setMembers(uniqueList);
+          onMembersChange?.(uniqueList.length);
           return;
         }
       } catch (err: any) {
@@ -143,8 +162,9 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
 
     const list = mockStore.getMembers(projectId);
-    if (!list.some((m) => m.user_id === currentUser.id)) {
-      list.push({
+    const filteredList = list.filter((m) => m.profile?.email !== 'developer@nooklabs.io' || m.user_id === currentUser.id);
+    if (!filteredList.some((m) => m.user_id === currentUser.id)) {
+      filteredList.push({
         id: `mem_cur_${currentUser.id}`,
         project_id: projectId,
         user_id: currentUser.id,
@@ -154,7 +174,8 @@ export const ShareModal: React.FC<ShareModalProps> = ({
         profile: currentUser,
       });
     }
-    setMembers(list);
+    setMembers(filteredList);
+    onMembersChange?.(filteredList.length);
   };
 
   if (!isOpen) return null;

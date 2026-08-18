@@ -232,12 +232,12 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1e1e1e] text-white flex flex-col md:flex-row font-sans select-none">
-      {/* Left Sidebar (Figma File Browser Style) */}
-      <aside className="w-full md:w-60 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col justify-between shrink-0 p-3">
-        <div className="space-y-4">
+    <div className="min-h-screen bg-[#1e1e1e] text-white flex flex-col md:flex-row font-sans md:h-screen md:overflow-hidden">
+      {/* Left Sidebar (Desktop: Vertical Sidebar, Mobile: Compact Header & Tabs) */}
+      <aside className="w-full md:w-60 bg-[#2c2c2c] border-b md:border-b-0 md:border-r border-white/[0.08] flex flex-col justify-between shrink-0 p-3 md:p-3.5 z-20">
+        <div className="space-y-3 md:space-y-4">
           {/* User Profile Header */}
-          <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+          <div className="flex items-center justify-between pb-2.5 md:pb-3 border-b border-white/[0.08]">
             <div className="flex items-center gap-2.5 min-w-0">
               <UserAvatar name={user.display_name} avatarUrl={user.avatar_url} size="sm" />
               <div className="min-w-0">
@@ -248,54 +248,55 @@ export default function DashboardPage() {
             <button
               onClick={() => signOut()}
               title="로그아웃"
-              className="p-1 text-neutral-400 hover:text-rose-400 hover:bg-white/[0.08] rounded transition-colors"
+              className="p-1.5 text-neutral-400 hover:text-rose-400 hover:bg-white/[0.08] rounded-lg transition-colors flex items-center gap-1 text-[11px]"
             >
               <LogOut className="w-3.5 h-3.5" />
+              <span className="md:hidden">로그아웃</span>
             </button>
           </div>
 
-          {/* Navigation Links (Figma Style) */}
-          <nav className="space-y-1">
+          {/* Navigation Links (Responsive: Horizontal scroll on mobile, Vertical on desktop) */}
+          <nav className="flex md:flex-col gap-1.5 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
             <button
               onClick={() => setActiveTab('recent')}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 whitespace-nowrap ${
                 activeTab === 'recent'
                   ? 'bg-[#0c8ce9] text-white shadow-sm'
-                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06] bg-[#222222] md:bg-transparent'
               }`}
             >
-              <Clock3 className="w-4 h-4" />
-              <span>최근 항목 (Recents)</span>
+              <Clock3 className="w-3.5 h-3.5" />
+              <span>최근 항목</span>
             </button>
 
             <button
               onClick={() => setActiveTab('my')}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 whitespace-nowrap ${
                 activeTab === 'my'
                   ? 'bg-[#0c8ce9] text-white shadow-sm'
-                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06] bg-[#222222] md:bg-transparent'
               }`}
             >
-              <FolderGit2 className="w-4 h-4" />
+              <FolderGit2 className="w-3.5 h-3.5" />
               <span>내 프로젝트</span>
             </button>
 
             <button
               onClick={() => setActiveTab('shared')}
-              className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 whitespace-nowrap ${
                 activeTab === 'shared'
                   ? 'bg-[#0c8ce9] text-white shadow-sm'
-                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06]'
+                  : 'text-neutral-300 hover:text-white hover:bg-white/[0.06] bg-[#222222] md:bg-transparent'
               }`}
             >
-              <Users className="w-4 h-4" />
+              <Users className="w-3.5 h-3.5" />
               <span>공유된 프로젝트</span>
             </button>
           </nav>
         </div>
 
-        {/* Brand Bottom Tag */}
-        <div className="pt-3 border-t border-white/[0.08] flex items-center justify-between text-[11px] text-neutral-400">
+        {/* Brand Bottom Tag (Desktop only) */}
+        <div className="hidden md:flex pt-3 border-t border-white/[0.08] items-center justify-between text-[11px] text-neutral-400">
           <span className="font-semibold text-neutral-300 flex items-center gap-1">
             <Database className="w-3.5 h-3.5 text-[#0c8ce9]" /> NookLabs ERD
           </span>
@@ -303,10 +304,10 @@ export default function DashboardPage() {
         </div>
       </aside>
 
-      {/* Main File Browser Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] overflow-y-auto">
+      {/* Main File Browser Content Area (Full native touch scroll on mobile) */}
+      <main className="flex-1 flex flex-col min-w-0 bg-[#1e1e1e] md:overflow-y-auto overflow-x-hidden">
         {/* Top Header / Search / CTA */}
-        <header className="h-14 border-b border-white/[0.08] px-4 sm:px-6 flex items-center justify-between gap-4 sticky top-0 bg-[#1e1e1e]/90 backdrop-blur-md z-20">
+        <header className="border-b border-white/[0.08] p-3 sm:px-6 sm:h-14 flex items-center justify-between gap-2.5 sticky top-0 bg-[#1e1e1e]/95 backdrop-blur-md z-10">
           {/* Search Bar */}
           <div className="relative flex-1 max-w-md">
             <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-3 top-2.5" />
@@ -322,7 +323,7 @@ export default function DashboardPage() {
           {/* New Project Button (Figma Blue) */}
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-3.5 py-1.5 bg-[#0c8ce9] hover:bg-[#0a77c7] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
+            className="px-3 py-1.5 bg-[#0c8ce9] hover:bg-[#0a77c7] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-[0.98] shrink-0 whitespace-nowrap"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>새 프로젝트</span>
@@ -330,8 +331,8 @@ export default function DashboardPage() {
         </header>
 
         {/* Section Header */}
-        <div className="px-4 sm:px-6 py-4 flex items-center justify-between">
-          <h1 className="text-sm font-bold text-white tracking-tight">
+        <div className="px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between">
+          <h1 className="text-xs sm:text-sm font-bold text-white tracking-tight">
             {activeTab === 'recent'
               ? '최근 항목'
               : activeTab === 'my'
@@ -342,7 +343,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Projects Grid (Figma Thumbnail Cards) */}
-        <div className="px-4 sm:px-6 pb-8">
+        <div className="px-3 sm:px-6 pb-16 md:pb-8">
           {filteredProjects.length === 0 ? (
             <div className="border border-dashed border-white/[0.12] rounded-xl p-12 text-center bg-[#242424]/40 my-6">
               <div className="w-12 h-12 rounded-xl bg-[#0c8ce9]/10 border border-[#0c8ce9]/20 text-[#0c8ce9] flex items-center justify-center mx-auto mb-3">
