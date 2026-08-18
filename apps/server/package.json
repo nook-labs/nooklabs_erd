@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@hocuspocus/server": "^2.13.5",
+    "@supabase/supabase-js": "^2.112.3",
     "dotenv": "^16.4.5",
     "ws": "^8.18.0",
     "yjs": "^13.6.20"

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { SchemaModel } from '@/types/erd';
+import { SchemaModel, NodeView, MemoModel, DomainItem } from '@/types/erd';
 import { generatePostgreSQLDDL } from '@/ddl/postgres';
 import { generateMSSQLDDL } from '@/ddl/mssql';
 import { generateMySQLDDL } from '@/ddl/mysql';
@@ -21,6 +21,9 @@ interface ExportModalProps {
   onClose: () => void;
   schema: SchemaModel;
   projectTitle: string;
+  nodes?: Record<string, NodeView>;
+  memos?: Record<string, MemoModel>;
+  domains?: DomainItem[];
 }
 
 type ExportTab = 'sql' | 'png' | 'json';
@@ -31,6 +34,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   onClose,
   schema,
   projectTitle,
+  nodes,
+  memos,
+  domains,
 }) => {
   if (!isOpen) return null;
 
@@ -53,7 +59,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   const sqlContent = getSqlContent();
-  const jsonContent = JSON.stringify(schema, null, 2);
+  
+  // Full backup JSON snapshot (including tables, relationships, coordinates, memos, and domains)
+  const fullBackupObject = {
+    projectTitle,
+    version: '2.0',
+    exportedAt: new Date().toISOString(),
+    tables: schema.tablesById,
+    relationships: schema.relationshipsById,
+    nodes: nodes || {},
+    memos: memos || {},
+    domains: domains || [],
+  };
+  const jsonContent = JSON.stringify(fullBackupObject, null, 2);
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);

@@ -22,6 +22,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { Toolbar } from '@/components/Toolbar';
 import { BottomBar, OnlineUserInfo } from '@/components/BottomBar';
 import { ExportModal } from '@/components/ExportModal';
+import { ImportModal } from '@/components/ImportModal';
 import { DomainModal } from '@/components/DomainModal';
 import { ValidationPanel } from '@/components/ValidationPanel';
 import { ShareModal } from '@/components/ShareModal';
@@ -45,7 +46,7 @@ import {
   restoreVersionSnapshotAction,
 } from '@/collaboration/versionActions';
 import { validateSchema, ValidationIssue } from '@/validation/validator';
-import { Database } from 'lucide-react';
+import { Database, Loader2 } from 'lucide-react';
 
 export default function ProjectEditorPage() {
   const params = useParams();
@@ -56,6 +57,9 @@ export default function ProjectEditorPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [myRole, setMyRole] = useState<ProjectRole>('editor');
   const [manager, setManager] = useState<ERDDocManager | null>(null);
+  const [isSynced, setIsSynced] = useState(false);
+  const [isWsConnected, setIsWsConnected] = useState(false);
+
   const [tables, setTables] = useState<Record<string, TableModel>>({});
   const [relationships, setRelationships] = useState<Record<string, RelationshipModel>>({});
   const [nodes, setNodes] = useState<Record<string, NodeView>>({});
@@ -75,10 +79,10 @@ export default function ProjectEditorPage() {
     showZoomLabels: true,
   });
 
-
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [isIdentifyingMode, setIsIdentifyingMode] = useState<boolean>(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isDomainOpen, setIsDomainOpen] = useState(false);
   const [isValidationOpen, setIsValidationOpen] = useState(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -187,12 +191,15 @@ export default function ProjectEditorPage() {
     if (!project || !user) return;
 
     const isReadOnly = myRole === 'viewer';
+    const roomName = project.room_id || `erd-proj-${project.id}`;
+
     const docMgr = createERDDoc({
-      roomName: project.room_id || `erd-proj-${project.id}`,
+      roomName,
       user,
       readOnly: isReadOnly,
     });
     setManager(docMgr);
+    setIsSynced(false);
 
     // Sync state from Yjs maps safely with micro-batching
     let syncRafId: number | null = null;
@@ -249,6 +256,55 @@ export default function ProjectEditorPage() {
 
     docMgr.doc.on('update', syncFromYjs);
 
+    // Safe Single-Seed Handler (Only executed once per document life-cycle via metaMap flag)
+    const checkAndSeedInitialData = () => {
+      setIsSynced(true);
+      syncFromYjs();
+
+      const isInitialized = docMgr.metaMap.get('is_initialized');
+      if (!isInitialized && docMgr.tablesMap.size === 0 && myRole !== 'viewer') {
+        docMgr.doc.transact(() => {
+          docMgr.metaMap.set('is_initialized', true);
+          const userTblId = addTableAction(docMgr, '회원', 'users', 120, 140, '#0c8ce9');
+          const orderTblId = addTableAction(docMgr, '주문', 'orders', 540, 140, '#10b981');
+          addRelationshipAction(docMgr, userTblId, orderTblId, 'non-identifying', 'one-to-many');
+          addMemoAction(
+            docMgr,
+            '📌 NookLabs ERD Studio\n좌측 툴바에서 1:N 관계 도구를 선택하여\n테이블 간 관계를 쉽게 연결할 수 있습니다.',
+            540,
+            420
+          );
+        }, docMgr.doc.clientID);
+      }
+    };
+
+    // Listen to Hocuspocus and IndexedDB sync events
+    if (docMgr.provider) {
+      docMgr.provider.on('synced', (syncedData: any) => {
+        const syncedState = typeof syncedData === 'boolean' ? syncedData : syncedData?.state;
+        if (syncedState) {
+          checkAndSeedInitialData();
+        }
+      });
+
+      docMgr.provider.on('status', ({ status }: { status: string }) => {
+        setIsWsConnected(status === 'connected');
+      });
+    }
+
+    if (docMgr.persistence) {
+      docMgr.persistence.on('synced', () => {
+        setIsSynced(true);
+        syncFromYjs();
+      });
+    }
+
+    // Safety fallback timeout to release loading indicator
+    const fallbackTimer = setTimeout(() => {
+      setIsSynced(true);
+      syncFromYjs();
+    }, 1200);
+
     // Live Online Users Tracking via Awareness
     const updateOnlineUsers = () => {
       if (docMgr.provider?.awareness) {
@@ -275,28 +331,13 @@ export default function ProjectEditorPage() {
       updateOnlineUsers();
     }
 
-    // Initial seed check after IndexedDB sync (avoid duplicated creation)
-    const seedTimeout = setTimeout(() => {
-      if (docMgr.tablesMap.size === 0 && myRole !== 'viewer') {
-        const userTblId = addTableAction(docMgr, '회원', 'users', 120, 140, '#0c8ce9');
-        const orderTblId = addTableAction(docMgr, '주문', 'orders', 540, 140, '#10b981');
-        addRelationshipAction(docMgr, userTblId, orderTblId, 'non-identifying', 'one-to-many');
-        addMemoAction(
-          docMgr,
-          '📌 NookLabs ERD Studio\n좌측 툴바에서 1:N 관계 도구를 선택하여\n테이블 간 관계를 쉽게 연결할 수 있습니다.',
-          540,
-          420
-        );
-      }
-      syncFromYjs();
-    }, 400);
-
     syncFromYjs();
 
     return () => {
-      clearTimeout(seedTimeout);
+      clearTimeout(fallbackTimer);
       docMgr.doc.off('update', syncFromYjs);
       docMgr.provider?.destroy();
+      docMgr.persistence?.destroy();
     };
   }, [project, user, myRole]);
 
@@ -333,47 +374,81 @@ export default function ProjectEditorPage() {
     [manager, isReadOnly]
   );
 
-
-  // Actions
-  const handleAddTable = useCallback(() => {
-    if (!manager || isReadOnly) return;
-    const count = Object.keys(tables).length + 1;
-    const colors = ['#0c8ce9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
-    const chosenColor = colors[(count - 1) % colors.length];
-
-    const posX = 150 + ((count * 40) % 400);
-    const posY = 150 + ((count * 30) % 300);
-    addTableAction(manager, `테이블_${count}`, `table_${count}`, posX, posY, chosenColor);
-    setActiveTool('select');
-  }, [manager, tables, isReadOnly]);
-
-  const handleAddMemo = useCallback(() => {
-    if (!manager || isReadOnly) return;
-    const count = Object.keys(memos).length + 1;
-    addMemoAction(manager, '새로운 메모 내용...', 200 + count * 30, 200 + count * 30);
-    setActiveTool('select');
-  }, [manager, memos, isReadOnly]);
-
+  // Auto Layout Handler
   const handleAutoLayout = useCallback(() => {
     if (!manager || isReadOnly) return;
     const tableKeys = Object.keys(tables);
-    const cols = 3;
-    const gapX = 380;
-    const gapY = 320;
-    const startX = 80;
-    const startY = 80;
+    const cols = Math.ceil(Math.sqrt(tableKeys.length || 1));
+    const spacingX = 420;
+    const spacingY = 320;
 
-    tableKeys.forEach((tId, idx) => {
-      const r = Math.floor(idx / cols);
-      const c = idx % cols;
-      updateNodePositionAction(manager, tId, startX + c * gapX, startY + r * gapY);
-    });
-
-    setTimeout(() => {
-      reactFlowInstanceRef.current?.fitView({ duration: 500 });
-    }, 100);
+    manager.doc.transact(() => {
+      tableKeys.forEach((tblId, index) => {
+        const row = Math.floor(index / cols);
+        const col = index % cols;
+        const x = 100 + col * spacingX;
+        const y = 100 + row * spacingY;
+        updateNodePositionAction(manager, tblId, x, y);
+      });
+    }, manager.doc.clientID);
   }, [manager, tables, isReadOnly]);
 
+  // ERD Operations
+  const handleAddTable = useCallback(
+    (x?: number, y?: number) => {
+      if (!manager || isReadOnly) return;
+      const posX = x ?? 100 + Math.random() * 200;
+      const posY = y ?? 100 + Math.random() * 200;
+      addTableAction(manager, '새 테이블', 'new_table', posX, posY);
+    },
+    [manager, isReadOnly]
+  );
+
+  const handleDeleteTable = useCallback(
+    (tableId: string) => {
+      if (!manager || isReadOnly) return;
+      deleteTableAction(manager, tableId);
+    },
+    [manager, isReadOnly]
+  );
+
+  const handleAddMemo = useCallback(
+    (x?: number, y?: number) => {
+      if (!manager || isReadOnly) return;
+      const posX = x ?? 200 + Math.random() * 100;
+      const posY = y ?? 200 + Math.random() * 100;
+      addMemoAction(manager, '새 메모', posX, posY);
+    },
+    [manager, isReadOnly]
+  );
+
+  const handleUpdateTitle = useCallback(
+    (newTitle: string) => {
+      setProjectTitle(newTitle);
+      if (manager && !isReadOnly) {
+        updateProjectTitleAction(manager, newTitle);
+      }
+      if (isSupabaseConfigured && supabase && project) {
+        supabase.from('projects').update({ name: newTitle }).eq('id', project.id).then();
+      }
+    },
+    [manager, project, isReadOnly]
+  );
+
+  // Zoom / FitView helpers via ReactFlow ref
+  const handleZoomIn = useCallback(() => {
+    reactFlowInstanceRef.current?.zoomIn?.({ duration: 300 });
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    reactFlowInstanceRef.current?.zoomOut?.({ duration: 300 });
+  }, []);
+
+  const handleFitView = useCallback(() => {
+    reactFlowInstanceRef.current?.fitView?.({ duration: 400, padding: 0.2 });
+  }, []);
+
+  // Domain Handlers
   const handleAddDomain = useCallback(
     (name: string, dataType: string, defaultValue?: string) => {
       if (!manager || isReadOnly) return;
@@ -399,108 +474,25 @@ export default function ProjectEditorPage() {
   );
 
   const handleSyncDomain = useCallback(
-    (domain: DomainItem): number => {
+    (domain: DomainItem) => {
       if (!manager || isReadOnly) return 0;
       return syncDomainColumnsAction(manager, domain);
     },
     [manager, isReadOnly]
   );
 
-  const handleUpdateTitle = useCallback(
-    (newTitle: string) => {
-      if (!manager || isReadOnly) return;
-      setProjectTitle(newTitle);
-      updateProjectTitleAction(manager, newTitle);
-    },
-    [manager, isReadOnly]
-  );
-
-  const handleFocusTable = useCallback(
-    (tableId: string) => {
-      const rf = reactFlowInstanceRef.current;
-      if (!rf) return;
-
-      const rfNode = rf.getNode(tableId);
-      const nodeView = nodes[tableId];
-
-      const x = rfNode?.position?.x ?? nodeView?.position?.x ?? 0;
-      const y = rfNode?.position?.y ?? nodeView?.position?.y ?? 0;
-
-      // 실제 렌더링된 테이블의 너비와 높이 측정값 사용
-      const width = rfNode?.measured?.width || rfNode?.width || nodeView?.position?.width || 480;
-      const height = rfNode?.measured?.height || rfNode?.height || nodeView?.position?.height || 260;
-
-      const targetZoom = 1.05;
-
-      // 테이블 자체의 절대 중심 좌표
-      let centerX = x + width / 2;
-      let centerY = y + height / 2;
-
-      // 우측 사이드 패널(EntityListPanel / Inspector)이 열려 있는 경우, 가려지지 않은 뷰포트 영역의 중앙으로 시야 보정
-      if (isEntityListOpen || isInspectorOpen) {
-        const panelWidth = 360; // 사이드 패널 너비
-        centerX += (panelWidth / 2) / targetZoom;
-      }
-
-      rf.setCenter(centerX, centerY, { zoom: targetZoom, duration: 600 });
-    },
-    [nodes, isEntityListOpen, isInspectorOpen]
-  );
-
-  const handleDeleteTable = useCallback(
-    (tableId: string) => {
-      if (!manager || isReadOnly) return;
-      deleteTableAction(manager, tableId);
-    },
-    [manager, isReadOnly]
-  );
-
-  // Keyboard Shortcuts (Improved: Shift+T for safe table creation to prevent misclicks)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
-        return;
-      }
-
-      if (e.key === 'v' || e.key === 'V') {
-        setActiveTool('select');
-      } else if (e.shiftKey && (e.key === 't' || e.key === 'T') && !isReadOnly) {
-        e.preventDefault();
-        handleAddTable();
-      } else if (e.shiftKey && (e.key === 'm' || e.key === 'M') && !isReadOnly) {
-        e.preventDefault();
-        handleAddMemo();
-      } else if (e.key === 'Escape') {
-        setActiveTool('select');
-        setIsInspectorOpen(false);
-        setIsEntityListOpen(false);
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !isReadOnly) {
-        e.preventDefault();
-        manager?.undoManager.undo();
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.shiftKey && e.key === 'z')) && !isReadOnly) {
-        e.preventDefault();
-        manager?.undoManager.redo();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [manager, handleAddTable, handleAddMemo, isReadOnly]);
-
-  if (!manager || !project || !user) {
+  if (authLoading || !project) {
     return (
-      <div className="w-screen h-screen bg-[#1e1e1e] text-white flex items-center justify-center font-sans">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-full border-2 border-[#0c8ce9] border-t-transparent animate-spin" />
-          <p className="text-xs font-medium text-neutral-400">ERD Studio 캔버스를 불러오는 중...</p>
-        </div>
+      <div className="flex h-screen w-screen items-center justify-center bg-[#121212] text-white flex-col gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <p className="text-sm text-neutral-400 font-medium tracking-wide">프로젝트 워크스페이스를 불러오는 중...</p>
       </div>
     );
   }
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-[#1e1e1e] font-sans overflow-hidden select-none">
-      {/* Top Toolbar (Figma Style) */}
+    <div className="flex flex-col h-screen w-screen bg-[#121212] text-white overflow-hidden select-none">
+      {/* Top Toolbar */}
       <Toolbar
         projectTitle={projectTitle}
         onUpdateTitle={handleUpdateTitle}
@@ -508,12 +500,12 @@ export default function ProjectEditorPage() {
         setDisplayMode={setDisplayMode}
         issues={issues}
         onToggleValidation={() => setIsValidationOpen((prev) => !prev)}
-        onUndo={() => manager.undoManager.undo()}
-        onRedo={() => manager.undoManager.redo()}
-        isConnected={true}
+        onUndo={() => manager?.undoManager.undo()}
+        onRedo={() => manager?.undoManager.redo()}
+        isConnected={isWsConnected}
         userRole={myRole}
         onOpenShareModal={() => setIsShareModalOpen(true)}
-        memberCount={mockStore.getMembers(project.id).length}
+        memberCount={onlineUsers.length || 1}
         onToggleInspector={() => setIsInspectorOpen((prev) => !prev)}
         isInspectorOpen={isInspectorOpen}
         onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
@@ -524,55 +516,74 @@ export default function ProjectEditorPage() {
         tableCount={Object.keys(tables).length}
       />
 
-      {/* Center Layout: Sidebar + Canvas + Inspector */}
-      <div className="flex-1 flex relative overflow-hidden">
-        {/* Left Sidebar Tools */}
+      {/* Main Workspace Area */}
+      <div className="flex flex-1 relative overflow-hidden">
+        {/* Left Floating Sidebar Tool Palette */}
         <Sidebar
           activeTool={activeTool}
           setActiveTool={setActiveTool}
           isIdentifyingMode={isIdentifyingMode}
           setIsIdentifyingMode={setIsIdentifyingMode}
-          onAddTable={handleAddTable}
-          onAddMemo={handleAddMemo}
+          onAddTable={() => handleAddTable()}
+          onAddMemo={() => handleAddMemo()}
           onAutoLayout={handleAutoLayout}
-          onZoomIn={() => reactFlowInstanceRef.current?.zoomIn({ duration: 300 })}
-          onZoomOut={() => reactFlowInstanceRef.current?.zoomOut({ duration: 300 })}
-          onFitView={() => reactFlowInstanceRef.current?.fitView({ duration: 500 })}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onFitView={handleFitView}
           onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
           isEntityListOpen={isEntityListOpen}
         />
 
-        {/* Main Canvas Area */}
-        <main className="flex-1 relative flex">
-          <ERDCanvas
-            manager={manager}
-            tables={tables}
-            relationships={relationships}
-            nodes={nodes}
-            memos={memos}
-            domains={domains}
-            displayMode={displayMode}
-            activeTool={activeTool}
-            setActiveTool={setActiveTool}
-            isIdentifyingMode={isIdentifyingMode}
-            isMiniMapOpen={isMiniMapOpen}
-            reactFlowInstanceRef={reactFlowInstanceRef}
-            canvasSettings={canvasSettings}
-          />
+        {/* ERD Canvas Area */}
+        <main className="flex-1 relative h-full w-full bg-[#1e1e1e] overflow-hidden">
+          {/* Sync Loading Overlay */}
+          {!isSynced && (
+            <div className="absolute inset-0 bg-[#121212]/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
+              <p className="text-xs text-neutral-300 font-medium">실시간 협업 데이터를 동기화하는 중...</p>
+            </div>
+          )}
 
-          {/* ERD Cloud Style ENTITY List Panel */}
+          {manager && (
+            <ERDCanvas
+              manager={manager}
+              tables={tables}
+              relationships={relationships}
+              nodes={nodes}
+              memos={memos}
+              domains={domains}
+              displayMode={displayMode}
+              activeTool={activeTool}
+              setActiveTool={setActiveTool}
+              isIdentifyingMode={isIdentifyingMode}
+              isMiniMapOpen={isMiniMapOpen}
+              reactFlowInstanceRef={reactFlowInstanceRef}
+              canvasSettings={canvasSettings}
+            />
+          )}
+
+          {/* Left Sliding Entity List Panel */}
           <EntityListPanel
             isOpen={isEntityListOpen}
             onClose={() => setIsEntityListOpen(false)}
             tables={tables}
             nodes={nodes}
-            onFocusTable={handleFocusTable}
+            onFocusTable={(tableId) => {
+              const node = nodes[tableId];
+              if (node && reactFlowInstanceRef.current) {
+                reactFlowInstanceRef.current.setCenter(
+                  node.position.x + (node.position.width || 300) / 2,
+                  node.position.y + (node.position.height || 200) / 2,
+                  { zoom: 1.2, duration: 600 }
+                );
+              }
+            }}
             onDeleteTable={handleDeleteTable}
-            onAddTable={handleAddTable}
+            onAddTable={() => handleAddTable()}
             isReadOnly={isReadOnly}
           />
 
-          {/* Version History Slide-in Panel (Snapshots & Restore) */}
+          {/* Version History Drawer Panel */}
           <VersionHistoryPanel
             isOpen={isVersionHistoryOpen}
             onClose={() => setIsVersionHistoryOpen(false)}
@@ -596,6 +607,7 @@ export default function ProjectEditorPage() {
             setDisplayMode={setDisplayMode}
             onOpenExport={() => setIsExportOpen(true)}
             onOpenDomain={() => setIsDomainOpen(true)}
+            onOpenImport={() => setIsImportOpen(true)}
           />
 
           {/* Read Only Watermark Notice for Viewer */}
@@ -618,7 +630,7 @@ export default function ProjectEditorPage() {
       {/* Bottom Status Bar */}
       <BottomBar
         onOpenDomain={() => setIsDomainOpen(true)}
-        onOpenImport={() => setIsExportOpen(true)}
+        onOpenImport={() => setIsImportOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
         isMiniMapOpen={isMiniMapOpen}
         setIsMiniMapOpen={setIsMiniMapOpen}
@@ -631,6 +643,16 @@ export default function ProjectEditorPage() {
         onClose={() => setIsExportOpen(false)}
         schema={schemaModel}
         projectTitle={projectTitle}
+        nodes={nodes}
+        memos={memos}
+        domains={domains}
+      />
+
+      {/* Import Modal (JSON Restore / Merge) */}
+      <ImportModal
+        isOpen={isImportOpen}
+        onClose={() => setIsImportOpen(false)}
+        manager={manager}
       />
 
       {/* Domain Modal */}
@@ -645,15 +667,16 @@ export default function ProjectEditorPage() {
       />
 
       {/* Share / Member Modal */}
-      <ShareModal
-        isOpen={isShareModalOpen}
-        onClose={() => setIsShareModalOpen(false)}
-        projectId={project.id}
-        projectName={project.name}
-        currentUser={user}
-        myRole={myRole}
-      />
+      {user && (
+        <ShareModal
+          isOpen={isShareModalOpen}
+          onClose={() => setIsShareModalOpen(false)}
+          projectId={project.id}
+          projectName={project.name}
+          currentUser={user}
+          myRole={myRole}
+        />
+      )}
     </div>
   );
 }
-

@@ -8,6 +8,7 @@ import {
   Sliders,
   Sparkles,
   Download,
+  Upload,
   FolderArchive,
   Table as TableIcon,
   Layers,
@@ -48,6 +49,7 @@ interface CanvasInspectorProps {
   setDisplayMode: (mode: DisplayMode) => void;
   onOpenExport: () => void;
   onOpenDomain: () => void;
+  onOpenImport?: () => void;
 }
 
 export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
@@ -61,6 +63,7 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   setDisplayMode,
   onOpenExport,
   onOpenDomain,
+  onOpenImport,
 }) => {
   const [activeTab, setActiveTab] = useState<'design' | 'schema'>('design');
   const [customHex, setCustomHex] = useState(settings.backgroundColor);
@@ -333,6 +336,19 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                 </span>
                 <span className="text-[10px] text-neutral-500 font-mono">Export</span>
               </button>
+
+              {onOpenImport && (
+                <button
+                  onClick={onOpenImport}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-[#2c2c2c] hover:bg-[#383838] text-neutral-200 hover:text-white transition-colors border border-white/[0.06]"
+                >
+                  <span className="flex items-center gap-2">
+                    <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>JSON 백업 불러오기</span>
+                  </span>
+                  <span className="text-[10px] text-neutral-500 font-mono">Import</span>
+                </button>
+              )}
 
               <button
                 onClick={onOpenDomain}
