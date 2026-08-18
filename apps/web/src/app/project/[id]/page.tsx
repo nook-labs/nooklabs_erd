@@ -67,7 +67,24 @@ export default function ProjectEditorPage() {
   const [domains, setDomains] = useState<DomainItem[]>([]);
   const [projectTitle, setProjectTitle] = useState('프로젝트 ERD');
   const [onlineUsers, setOnlineUsers] = useState<OnlineUserInfo[]>([]);
-  const [displayMode, setDisplayMode] = useState<DisplayMode>('physical');
+  const [displayMode, setDisplayModeState] = useState<DisplayMode>('physical');
+
+  // Load saved DisplayMode from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('nooklabs_display_mode') as DisplayMode;
+      if (saved && (saved === 'physical' || saved === 'logical' || saved === 'both')) {
+        setDisplayModeState(saved);
+      }
+    }
+  }, []);
+
+  const setDisplayMode = useCallback((mode: DisplayMode) => {
+    setDisplayModeState(mode);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nooklabs_display_mode', mode);
+    }
+  }, []);
 
   // Canvas Inspector & Background Settings
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
@@ -595,21 +612,6 @@ export default function ProjectEditorPage() {
             currentRelationshipCount={Object.keys(relationships).length}
           />
 
-          {/* Figma Right Inspector Panel (Page Background, Grid, Schema Stats) */}
-          <CanvasInspector
-            isOpen={isInspectorOpen}
-            onClose={() => setIsInspectorOpen(false)}
-            settings={canvasSettings}
-            onUpdateSettings={handleUpdateCanvasSettings}
-            tableCount={Object.keys(tables).length}
-            relationshipCount={Object.keys(relationships).length}
-            displayMode={displayMode}
-            setDisplayMode={setDisplayMode}
-            onOpenExport={() => setIsExportOpen(true)}
-            onOpenDomain={() => setIsDomainOpen(true)}
-            onOpenImport={() => setIsImportOpen(true)}
-          />
-
           {/* Read Only Watermark Notice for Viewer */}
           {isReadOnly && (
             <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1e1e1e]/90 border border-white/20 px-3.5 py-1 rounded-full backdrop-blur-md shadow-xl flex items-center gap-2 text-xs text-neutral-300 pointer-events-none z-20 whitespace-nowrap">
@@ -625,6 +627,21 @@ export default function ProjectEditorPage() {
             issues={issues}
           />
         </main>
+
+        {/* Figma Right Inspector Panel (Page Background, Grid, Schema Stats) */}
+        <CanvasInspector
+          isOpen={isInspectorOpen}
+          onClose={() => setIsInspectorOpen(false)}
+          settings={canvasSettings}
+          onUpdateSettings={handleUpdateCanvasSettings}
+          tableCount={Object.keys(tables).length}
+          relationshipCount={Object.keys(relationships).length}
+          displayMode={displayMode}
+          setDisplayMode={setDisplayMode}
+          onOpenExport={() => setIsExportOpen(true)}
+          onOpenDomain={() => setIsDomainOpen(true)}
+          onOpenImport={() => setIsImportOpen(true)}
+        />
       </div>
 
       {/* Bottom Status Bar */}
