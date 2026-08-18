@@ -161,6 +161,18 @@ export default function ProjectEditorPage() {
       const fetchProjectData = async () => {
         if (isSupabaseConfigured && supabase) {
           try {
+            // Ensure profile exists in profiles table
+            await supabase.from('profiles').upsert(
+              {
+                id: user.id,
+                email: user.email,
+                display_name: user.display_name,
+                avatar_url: user.avatar_url,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+
             const { data: projData, error: projErr } = await supabase
               .from('projects')
               .select('*')
@@ -171,6 +183,8 @@ export default function ProjectEditorPage() {
               setProject(projData);
               setProjectTitle(projData.name);
 
+              const isOwner = projData.owner_id === user.id;
+
               const { data: memberData } = await supabase
                 .from('project_members')
                 .select('role')
@@ -178,8 +192,38 @@ export default function ProjectEditorPage() {
                 .eq('user_id', user.id)
                 .maybeSingle();
 
-              const role = memberData?.role || (projData.owner_id === user.id ? 'owner' : 'editor');
-              setMyRole(role as ProjectRole);
+              const resolvedRole: ProjectRole = isOwner
+                ? 'owner'
+                : (memberData?.role as ProjectRole) || 'editor';
+
+              // Automatically upsert membership so project appears in Dashboard and ShareModal
+              if (!memberData || (isOwner && memberData.role !== 'owner')) {
+                try {
+                  await supabase.from('project_members').upsert(
+                    {
+                      project_id: projectId,
+                      user_id: user.id,
+                      role: resolvedRole,
+                      joined_at: new Date().toISOString(),
+                    },
+                    { onConflict: 'project_id,user_id' }
+                  );
+
+                  // If user joined via invite email, mark invitation as accepted
+                  if (user.email) {
+                    await supabase
+                      .from('project_invitations')
+                      .update({ accepted_at: new Date().toISOString() })
+                      .eq('project_id', projectId)
+                      .eq('email', user.email)
+                      .is('accepted_at', null);
+                  }
+                } catch (mErr: any) {
+                  console.warn('Auto member registration warning:', mErr.message);
+                }
+              }
+
+              setMyRole(resolvedRole);
               return;
             }
           } catch (err: any) {
@@ -192,10 +236,15 @@ export default function ProjectEditorPage() {
         if (proj) {
           setProject(proj);
           setProjectTitle(proj.name);
+          const isOwner = proj.owner_id === user.id;
           const members = mockStore.getMembers(projectId);
           const currentMember = members.find((m) => m.user_id === user.id);
-          const role = currentMember?.role || (proj.owner_id === user.id ? 'owner' : 'editor');
-          setMyRole(role);
+          const resolvedRole: ProjectRole = isOwner ? 'owner' : currentMember?.role || 'editor';
+
+          if (!currentMember) {
+            mockStore.addMember(projectId, user.id, resolvedRole, proj.owner_id);
+          }
+          setMyRole(resolvedRole);
         }
       };
 
@@ -273,26 +322,10 @@ export default function ProjectEditorPage() {
 
     docMgr.doc.on('update', syncFromYjs);
 
-    // Safe Single-Seed Handler (Only executed once per document life-cycle via metaMap flag)
-    const checkAndSeedInitialData = () => {
+    // Document sync handler
+    const handleDocumentSynced = () => {
       setIsSynced(true);
       syncFromYjs();
-
-      const isInitialized = docMgr.metaMap.get('is_initialized');
-      if (!isInitialized && docMgr.tablesMap.size === 0 && myRole !== 'viewer') {
-        docMgr.doc.transact(() => {
-          docMgr.metaMap.set('is_initialized', true);
-          const userTblId = addTableAction(docMgr, '회원', 'users', 120, 140, '#0c8ce9');
-          const orderTblId = addTableAction(docMgr, '주문', 'orders', 540, 140, '#10b981');
-          addRelationshipAction(docMgr, userTblId, orderTblId, 'non-identifying', 'one-to-many');
-          addMemoAction(
-            docMgr,
-            '📌 NookLabs ERD Studio\n좌측 툴바에서 1:N 관계 도구를 선택하여\n테이블 간 관계를 쉽게 연결할 수 있습니다.',
-            540,
-            420
-          );
-        }, docMgr.doc.clientID);
-      }
     };
 
     // Listen to Hocuspocus and IndexedDB sync events
@@ -300,7 +333,7 @@ export default function ProjectEditorPage() {
       docMgr.provider.on('synced', (syncedData: any) => {
         const syncedState = typeof syncedData === 'boolean' ? syncedData : syncedData?.state;
         if (syncedState) {
-          checkAndSeedInitialData();
+          handleDocumentSynced();
         }
       });
 
@@ -438,6 +471,60 @@ export default function ProjectEditorPage() {
     },
     [manager, isReadOnly]
   );
+
+  // Global Keyboard Shortcuts (Shift + T, Shift + M, V)
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable ||
+          target.closest('[contenteditable="true"]'))
+      ) {
+        return;
+      }
+
+      if (isReadOnly) return;
+
+      const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
+
+      if (e.shiftKey && !hasModifier) {
+        const key = e.key.toLowerCase();
+        const code = e.code;
+
+        // Shift + T (테이블 추가: 대소문자, 한영, 물리키 KeyT 모두 지원)
+        if (key === 't' || key === 'ㅅ' || code === 'KeyT') {
+          e.preventDefault();
+          handleAddTable();
+          return;
+        }
+
+        // Shift + M (메모 추가: 대소문자, 한영, 물리키 KeyM 모두 지원)
+        if (key === 'm' || key === 'ㅡ' || code === 'KeyM') {
+          e.preventDefault();
+          handleAddMemo();
+          return;
+        }
+      }
+
+      // V (선택 도구 전환: 대소문자, 한영, 물리키 KeyV 지원)
+      if (!e.shiftKey && !hasModifier) {
+        const key = e.key.toLowerCase();
+        const code = e.code;
+        if (key === 'v' || key === 'ㅍ' || code === 'KeyV') {
+          setActiveTool('select');
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown);
+    };
+  }, [handleAddTable, handleAddMemo, isReadOnly, setActiveTool]);
 
   const handleUpdateTitle = useCallback(
     (newTitle: string) => {

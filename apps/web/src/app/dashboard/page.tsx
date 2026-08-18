@@ -50,6 +50,19 @@ export default function DashboardPage() {
 
     if (isSupabaseConfigured && supabase) {
       try {
+        // Ensure user profile exists in profiles table
+        await supabase.from('profiles').upsert(
+          {
+            id: user.id,
+            email: user.email,
+            display_name: user.display_name,
+            avatar_url: user.avatar_url,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        );
+
+        // 1. Projects owned by the user
         const { data: ownedList, error: ownedErr } = await supabase
           .from('projects')
           .select('*')
@@ -58,6 +71,7 @@ export default function DashboardPage() {
 
         if (ownedErr) throw ownedErr;
 
+        // 2. Projects where user is a member
         const { data: memberList, error: memberErr } = await supabase
           .from('project_members')
           .select(`
@@ -68,22 +82,42 @@ export default function DashboardPage() {
 
         if (memberErr) throw memberErr;
 
+        // 3. Fetch all member counts for accurate display
+        const { data: allMembers } = await supabase
+          .from('project_members')
+          .select('project_id');
+
+        const memberCountMap: Record<string, number> = {};
+        (allMembers || []).forEach((m: any) => {
+          if (m.project_id) {
+            memberCountMap[m.project_id] = (memberCountMap[m.project_id] || 0) + 1;
+          }
+        });
+
         const ownedProjects: Project[] = (ownedList || []).map((p: any) => ({
           ...p,
           my_role: 'owner' as ProjectRole,
-          member_count: 1,
+          member_count: Math.max(memberCountMap[p.id] || 1, 1),
         }));
 
         const sharedProjects: Project[] = (memberList || [])
           .filter((m: any) => m.project && m.project.owner_id !== user.id)
           .map((m: any) => ({
             ...m.project,
-            my_role: m.role as ProjectRole,
-            member_count: 1,
+            my_role: (m.role || 'editor') as ProjectRole,
+            member_count: Math.max(memberCountMap[m.project.id] || 1, 1),
           }));
 
-        const combined = [...ownedProjects, ...sharedProjects];
-        setProjects(combined);
+        // Deduplicate projects in case of overlaps
+        const projectMap = new Map<string, Project>();
+        ownedProjects.forEach((p) => projectMap.set(p.id, p));
+        sharedProjects.forEach((p) => {
+          if (!projectMap.has(p.id)) {
+            projectMap.set(p.id, p);
+          }
+        });
+
+        setProjects(Array.from(projectMap.values()));
       } catch (err: any) {
         console.warn('Supabase fetch error, fallback to local store:', err.message);
         setProjects(mockStore.getProjects(user.id));
@@ -121,6 +155,17 @@ export default function DashboardPage() {
           .single();
 
         if (error) throw error;
+
+        // Upsert owner membership
+        if (newProj?.id) {
+          await supabase.from('project_members').upsert({
+            project_id: newProj.id,
+            user_id: user.id,
+            role: 'owner',
+            joined_at: new Date().toISOString(),
+          }, { onConflict: 'project_id,user_id' });
+        }
+
         await loadProjects();
         router.push(`/project/${newProj.id}`);
         return;

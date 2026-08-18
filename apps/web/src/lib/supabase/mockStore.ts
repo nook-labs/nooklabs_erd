@@ -78,11 +78,31 @@ export const mockStore = {
     ];
 
     const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, defaultProjects);
-    return allProjects;
+    const allMembers = getStored<ProjectMember[]>(MOCK_MEMBERS_STORAGE_KEY, []);
+
+    // Filter projects where user is owner OR member
+    const userProjects = allProjects.filter((p) => {
+      if (p.owner_id === userId) return true;
+      return allMembers.some((m) => m.project_id === p.id && m.user_id === userId);
+    });
+
+    return userProjects.map((p) => {
+      const projectMembers = allMembers.filter((m) => m.project_id === p.id);
+      const myMembership = projectMembers.find((m) => m.user_id === userId);
+      const isOwner = p.owner_id === userId;
+      const role: ProjectRole = isOwner ? 'owner' : myMembership?.role || 'editor';
+      const memberCount = Math.max(projectMembers.length, 1);
+
+      return {
+        ...p,
+        my_role: role,
+        member_count: memberCount,
+      };
+    });
   },
 
   createProject(userId: string, name: string, description: string, dialect: any): Project {
-    const projects = this.getProjects(userId);
+    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, []);
     const newProj: Project = {
       id: 'proj-' + Math.random().toString(36).substring(2, 9),
       owner_id: userId,
@@ -96,7 +116,7 @@ export const mockStore = {
       my_role: 'owner',
       member_count: 1,
     };
-    const updated = [newProj, ...projects];
+    const updated = [newProj, ...allProjects];
     setStored(MOCK_PROJECTS_STORAGE_KEY, updated);
 
     // Add owner to members
@@ -107,41 +127,65 @@ export const mockStore = {
   deleteProject(projectId: string): void {
     const user = this.getCurrentUser();
     if (!user) return;
-    const projects = this.getProjects(user.id).filter((p) => p.id !== projectId);
+    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, []);
+    const projects = allProjects.filter((p) => p.id !== projectId);
     setStored(MOCK_PROJECTS_STORAGE_KEY, projects);
   },
 
   getProjectById(projectId: string): Project | null {
-    const user = this.getCurrentUser();
-    const projects = this.getProjects(user?.id || 'usr_dev_1001');
-    return projects.find((p) => p.id === projectId) || null;
+    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, []);
+    return allProjects.find((p) => p.id === projectId) || null;
   },
 
   // Members
   getMembers(projectId: string): ProjectMember[] {
     const allMembers = getStored<ProjectMember[]>(MOCK_MEMBERS_STORAGE_KEY, []);
     const filtered = allMembers.filter((m) => m.project_id === projectId);
+    const currentUser = this.getCurrentUser() || DEFAULT_MOCK_USER;
+
     if (filtered.length === 0) {
-      const user = this.getCurrentUser() || DEFAULT_MOCK_USER;
-      const initial: ProjectMember[] = [
-        {
-          id: 'mem-' + Math.random().toString(36).substring(2, 9),
-          project_id: projectId,
-          user_id: user.id,
-          role: 'owner',
-          invited_by: null,
-          joined_at: new Date().toISOString(),
-          profile: user,
-        },
-      ];
-      setStored(MOCK_MEMBERS_STORAGE_KEY, [...allMembers, ...initial]);
-      return initial;
+      const initial: ProjectMember = {
+        id: 'mem-' + Math.random().toString(36).substring(2, 9),
+        project_id: projectId,
+        user_id: currentUser.id,
+        role: 'owner',
+        invited_by: null,
+        joined_at: new Date().toISOString(),
+        profile: currentUser,
+      };
+      setStored(MOCK_MEMBERS_STORAGE_KEY, [...allMembers, initial]);
+      return [initial];
     }
     return filtered;
   },
 
   addMember(projectId: string, userId: string, role: ProjectRole, invitedBy: string | null): ProjectMember {
     const allMembers = getStored<ProjectMember[]>(MOCK_MEMBERS_STORAGE_KEY, []);
+    const existingIndex = allMembers.findIndex((m) => m.project_id === projectId && m.user_id === userId);
+    const currentUser = this.getCurrentUser();
+
+    let userProfile = currentUser?.id === userId ? currentUser : null;
+    if (!userProfile) {
+      userProfile = {
+        id: userId,
+        email: `${userId}@nooklabs.io`,
+        display_name: userId === 'usr_dev_1001' ? 'David Lee (Dev)' : `Member (${userId.slice(-4)})`,
+        avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${userId}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    }
+
+    if (existingIndex >= 0) {
+      allMembers[existingIndex] = {
+        ...allMembers[existingIndex],
+        role,
+        profile: userProfile,
+      };
+      setStored(MOCK_MEMBERS_STORAGE_KEY, allMembers);
+      return allMembers[existingIndex];
+    }
+
     const newMember: ProjectMember = {
       id: 'mem-' + Math.random().toString(36).substring(2, 9),
       project_id: projectId,
@@ -149,6 +193,7 @@ export const mockStore = {
       role,
       invited_by: invitedBy,
       joined_at: new Date().toISOString(),
+      profile: userProfile,
     };
     setStored(MOCK_MEMBERS_STORAGE_KEY, [...allMembers, newMember]);
     return newMember;

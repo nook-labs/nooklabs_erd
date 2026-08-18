@@ -51,6 +51,22 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const loadMembers = async () => {
     if (isSupabaseConfigured && supabase) {
       try {
+        // 1. Fetch project info to identify the owner
+        const { data: projData } = await supabase
+          .from('projects')
+          .select(`
+            owner_id,
+            owner:profiles (
+              id,
+              email,
+              display_name,
+              avatar_url
+            )
+          `)
+          .eq('id', projectId)
+          .single();
+
+        // 2. Fetch all registered project members
         const { data: memberRows, error } = await supabase
           .from('project_members')
           .select(`
@@ -68,16 +84,56 @@ export const ShareModal: React.FC<ShareModalProps> = ({
           `)
           .eq('project_id', projectId);
 
-        if (!error && memberRows && memberRows.length > 0) {
-          const list: ProjectMember[] = memberRows.map((m: any) => ({
+        if (!error) {
+          const list: ProjectMember[] = (memberRows || []).map((m: any) => ({
             id: m.id,
             project_id: m.project_id,
             user_id: m.user_id,
             role: m.role as ProjectRole,
             invited_by: null,
             joined_at: m.joined_at,
-            profile: m.profile,
+            profile: m.profile || {
+              id: m.user_id,
+              email: `${m.user_id.slice(0, 8)}@nooklabs.io`,
+              display_name: 'Member',
+              avatar_url: null,
+            },
           }));
+
+          // Ensure owner is always included at the top of the list
+          const hasOwner = list.some((m) => m.role === 'owner' || m.user_id === projData?.owner_id);
+          if (!hasOwner && projData?.owner_id) {
+            const ownerProfile = (projData as any).owner || {
+              id: projData.owner_id,
+              email: 'owner@nooklabs.io',
+              display_name: 'Owner',
+              avatar_url: null,
+            };
+            list.unshift({
+              id: `mem_owner_${projData.owner_id}`,
+              project_id: projectId,
+              user_id: projData.owner_id,
+              role: 'owner',
+              invited_by: null,
+              joined_at: new Date().toISOString(),
+              profile: ownerProfile,
+            });
+          }
+
+          // If current user is viewing and not yet in list, include current user
+          const hasCurrentUser = list.some((m) => m.user_id === currentUser.id);
+          if (!hasCurrentUser) {
+            list.push({
+              id: `mem_cur_${currentUser.id}`,
+              project_id: projectId,
+              user_id: currentUser.id,
+              role: myRole,
+              invited_by: null,
+              joined_at: new Date().toISOString(),
+              profile: currentUser,
+            });
+          }
+
           setMembers(list);
           return;
         }
@@ -87,6 +143,17 @@ export const ShareModal: React.FC<ShareModalProps> = ({
     }
 
     const list = mockStore.getMembers(projectId);
+    if (!list.some((m) => m.user_id === currentUser.id)) {
+      list.push({
+        id: `mem_cur_${currentUser.id}`,
+        project_id: projectId,
+        user_id: currentUser.id,
+        role: myRole,
+        invited_by: null,
+        joined_at: new Date().toISOString(),
+        profile: currentUser,
+      });
+    }
     setMembers(list);
   };
 
