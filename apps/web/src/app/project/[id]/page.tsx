@@ -87,15 +87,64 @@ export default function ProjectEditorPage() {
     }
   }, []);
 
-  // Canvas Inspector & Background Settings
+  // Canvas Inspector & Background Settings (Persistent per user)
   const [isInspectorOpen, setIsInspectorOpen] = useState(false);
-  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>({
-    backgroundColor: '#1e1e1e', // Figma Dark Default
-    gridType: 'dots',
-    gridColor: 'rgba(255, 255, 255, 0.12)',
-    zoomLabelScale: 1.45,
-    showZoomLabels: true,
+  const [canvasSettings, setCanvasSettings] = useState<CanvasSettings>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('nooklabs_canvas_settings');
+        if (saved) {
+          return JSON.parse(saved);
+        }
+      } catch (e) {
+        console.error('Failed to load initial canvas settings', e);
+      }
+    }
+    return {
+      backgroundColor: '#1e1e1e', // Figma Dark Default
+      gridType: 'dots',
+      gridColor: 'rgba(255, 255, 255, 0.12)',
+      zoomLabelScale: 1.45,
+      showZoomLabels: true,
+    };
   });
+
+  // Reload canvas settings when user is loaded
+  useEffect(() => {
+    if (typeof window !== 'undefined' && user?.id) {
+      try {
+        const userKey = `nooklabs_canvas_settings_${user.id}`;
+        const saved = localStorage.getItem(userKey);
+        if (saved) {
+          setCanvasSettings(JSON.parse(saved));
+        }
+      } catch (e) {
+        console.error('Failed to load user canvas settings', e);
+      }
+    }
+  }, [user?.id]);
+
+  const handleUpdateCanvasSettings = useCallback(
+    (updates: Partial<CanvasSettings>) => {
+      setCanvasSettings((prev) => {
+        const next = { ...prev, ...updates };
+        if (typeof window !== 'undefined') {
+          try {
+            const userKey = user?.id ? `nooklabs_canvas_settings_${user.id}` : 'nooklabs_canvas_settings';
+            localStorage.setItem(userKey, JSON.stringify(next));
+            localStorage.setItem('nooklabs_canvas_settings', JSON.stringify(next));
+          } catch (e) {
+            console.error('Failed to save canvas settings', e);
+          }
+        }
+        return next;
+      });
+    },
+    [user?.id]
+  );
+
+  // Viewer Mode State (Manual toggle for view-only safe browsing)
+  const [isViewerMode, setIsViewerMode] = useState<boolean>(false);
 
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [isIdentifyingMode, setIsIdentifyingMode] = useState<boolean>(false);
@@ -416,30 +465,6 @@ export default function ProjectEditorPage() {
 
   const isReadOnly = myRole === 'viewer';
 
-  // Handle Canvas Settings Update & Yjs Broadcast
-  const handleUpdateCanvasSettings = useCallback(
-    (updates: Partial<CanvasSettings>) => {
-      setCanvasSettings((prev) => {
-        const next = { ...prev, ...updates };
-        if (manager && !isReadOnly) {
-          manager.doc.transact(() => {
-            if (updates.backgroundColor) {
-              manager.metaMap.set('canvasBg', updates.backgroundColor);
-            }
-            if (updates.gridType) {
-              manager.metaMap.set('canvasGrid', updates.gridType);
-            }
-            if (updates.zoomLabelScale !== undefined) {
-              manager.metaMap.set('canvasZoomScale', updates.zoomLabelScale);
-            }
-          }, manager.doc.clientID);
-        }
-        return next;
-      });
-    },
-    [manager, isReadOnly]
-  );
-
   // Auto Layout Handler
   const handleAutoLayout = useCallback(() => {
     if (!manager || isReadOnly) return;
@@ -634,6 +659,8 @@ export default function ProjectEditorPage() {
         isVersionHistoryOpen={isVersionHistoryOpen}
         versionCount={versions.length}
         tableCount={Object.keys(tables).length}
+        isViewerMode={isViewerMode}
+        onToggleViewerMode={() => setIsViewerMode((prev) => !prev)}
       />
 
       {/* Main Workspace Area */}
@@ -677,6 +704,7 @@ export default function ProjectEditorPage() {
               setActiveTool={setActiveTool}
               isIdentifyingMode={isIdentifyingMode}
               isMiniMapOpen={isMiniMapOpen}
+              isViewerMode={isReadOnly || isViewerMode}
               reactFlowInstanceRef={reactFlowInstanceRef}
               canvasSettings={canvasSettings}
             />
@@ -700,7 +728,7 @@ export default function ProjectEditorPage() {
             }}
             onDeleteTable={handleDeleteTable}
             onAddTable={() => handleAddTable()}
-            isReadOnly={isReadOnly}
+            isReadOnly={isReadOnly || isViewerMode}
           />
 
           {/* Version History Drawer Panel */}
@@ -716,10 +744,12 @@ export default function ProjectEditorPage() {
           />
 
           {/* Read Only Watermark Notice for Viewer */}
-          {isReadOnly && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1e1e1e]/90 border border-white/20 px-3.5 py-1 rounded-full backdrop-blur-md shadow-xl flex items-center gap-2 text-xs text-neutral-300 pointer-events-none z-20 whitespace-nowrap">
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
-              <span>현재 <strong>Viewer(읽기 전용)</strong> 권한으로 열람 중입니다.</span>
+          {(isReadOnly || isViewerMode) && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1e1e1e]/90 border border-purple-500/30 px-3.5 py-1 rounded-full backdrop-blur-md shadow-xl flex items-center gap-2 text-xs text-neutral-200 pointer-events-none z-20 whitespace-nowrap">
+              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+              <span>
+                현재 <strong>{isViewerMode ? '뷰어 모드 (편집 잠금)' : 'Viewer(읽기 전용)'}</strong> 상태입니다.
+              </span>
             </div>
           )}
 

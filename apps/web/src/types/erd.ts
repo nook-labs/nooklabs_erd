@@ -59,6 +59,7 @@ export interface ColumnModel {
   origin?: 'user' | 'relationship-generated' | 'detached';
   relationshipId?: string;
   sourceColumnId?: string;
+  isHighlighted?: boolean; // 속성 강조 표시 (VS Code 중단점 스타일)
 }
 
 export interface TableModel {

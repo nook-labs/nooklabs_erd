@@ -18,6 +18,7 @@ import '@xyflow/react/dist/style.css';
 
 import {
   TableModel,
+  ColumnModel,
   RelationshipModel,
   NodeView,
   DisplayMode,
@@ -42,11 +43,14 @@ import {
   addRelationshipAction,
   updateRelationshipAction,
   deleteRelationshipAction,
+  attachManualFkAction,
+  detachFkAction,
   updateMemoAction,
   deleteMemoAction,
 } from '@/collaboration/actions';
 import { RelationshipModal } from './RelationshipModal';
 import { CreateRelationshipModal } from './CreateRelationshipModal';
+import { ManualFkModal } from './ManualFkModal';
 import { MultiplayerCursors } from './MultiplayerCursors';
 import { CanvasSettings } from './CanvasInspector';
 
@@ -62,6 +66,7 @@ interface ERDCanvasProps {
   setActiveTool: (tool: ActiveTool) => void;
   isIdentifyingMode: boolean;
   isMiniMapOpen: boolean;
+  isViewerMode?: boolean;
   reactFlowInstanceRef?: React.MutableRefObject<any>;
   canvasSettings: CanvasSettings;
 }
@@ -86,6 +91,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   activeTool,
   setActiveTool,
   isMiniMapOpen,
+  isViewerMode = false,
   reactFlowInstanceRef,
   canvasSettings,
 }) => {
@@ -101,6 +107,15 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
 
   // Selected Relationship for Modal Edit
   const [editingRelationship, setEditingRelationship] = useState<RelationshipModel | null>(null);
+
+  // Manual FK Modal Target
+  const [manualFkTarget, setManualFkTarget] = useState<{
+    table: TableModel;
+    column: ColumnModel;
+  } | null>(null);
+
+  // Real-time Spacebar Pan Cursor Detection
+  const [isSpaceDown, setIsSpaceDown] = useState(false);
 
   // Convert Yjs tables & memos to React Flow Nodes
   const computedNodes: Node[] = useMemo(() => {
@@ -125,20 +140,24 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           zoomLabelScale: canvasSettings.zoomLabelScale ?? 1.45,
           isSourceCandidate,
           isTargetCandidate,
+          isViewerMode,
+          onOpenManualFk: (t: TableModel, c: any) => setManualFkTarget({ table: t, column: c }),
           onUpdateTable: (tId: string, updates: Partial<TableModel>) =>
-            updateTableAction(manager, tId, updates),
-          onDuplicateTable: (tId: string) => duplicateTableAction(manager, tId),
-          onDeleteTable: (tId: string) => deleteTableAction(manager, tId),
+            !isViewerMode && updateTableAction(manager, tId, updates),
+          onDuplicateTable: (tId: string) => !isViewerMode && duplicateTableAction(manager, tId),
+          onDeleteTable: (tId: string) => !isViewerMode && deleteTableAction(manager, tId),
           onAddColumn: (tId: string, colData?: any, insertIndex?: number) =>
-            addColumnAction(manager, tId, colData, insertIndex),
+            !isViewerMode && addColumnAction(manager, tId, colData, insertIndex),
           onUpdateColumn: (tId: string, cId: string, updates: any) =>
-            updateColumnAction(manager, tId, cId, updates),
-          onDeleteColumn: (tId: string, cId: string) => deleteColumnAction(manager, tId, cId),
+            !isViewerMode && updateColumnAction(manager, tId, cId, updates),
+          onDeleteColumn: (tId: string, cId: string) =>
+            !isViewerMode && deleteColumnAction(manager, tId, cId),
           onReorderColumns: (tId: string, newOrder: string[]) =>
-            reorderColumnsAction(manager, tId, newOrder),
+            !isViewerMode && reorderColumnsAction(manager, tId, newOrder),
           onMoveColumn: (tId: string, cId: string, direction: 'up' | 'down') =>
-            moveColumnAction(manager, tId, cId, direction),
+            !isViewerMode && moveColumnAction(manager, tId, cId, direction),
           onTableClick: (tId: string) => {
+            if (isViewerMode) return;
             if (activeTool.startsWith('rel-')) {
               if (!selectedParentTableId) {
                 setSelectedParentTableId(tId);
@@ -164,14 +183,27 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
       position: memo.position,
       data: {
         memo,
+        isViewerMode,
         onUpdate: (mId: string, updates: Partial<MemoModel>) =>
-          updateMemoAction(manager, mId, updates),
-        onDelete: (mId: string) => deleteMemoAction(manager, mId),
+          !isViewerMode && updateMemoAction(manager, mId, updates),
+        onDelete: (mId: string) => !isViewerMode && deleteMemoAction(manager, mId),
       },
     }));
 
     return [...tableNodes, ...memoNodes];
-  }, [tables, nodes, memos, displayMode, selectedParentTableId, activeTool, manager, setActiveTool]);
+  }, [
+    tables,
+    nodes,
+    memos,
+    displayMode,
+    selectedParentTableId,
+    activeTool,
+    manager,
+    setActiveTool,
+    isViewerMode,
+    canvasSettings.zoomLabelScale,
+    domains,
+  ]);
 
   // Convert Yjs relationships to React Flow Edges
   const computedEdges: Edge[] = useMemo(() => {
@@ -308,29 +340,64 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(computedNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(computedEdges);
 
-  // Keep existing node selection state when Yjs syncs
+  // Keep existing node selection state and update draggable (draggable only when selected)
   useEffect(() => {
     setRfNodes((prevNodes) => {
       const selectedMap = new Map(prevNodes.map((n) => [n.id, n.selected]));
-      return computedNodes.map((n) => ({
-        ...n,
-        selected: selectedMap.get(n.id) ?? false,
-      }));
+      return computedNodes.map((n) => {
+        const isSelected = selectedMap.get(n.id) ?? false;
+        return {
+          ...n,
+          selected: isSelected,
+          draggable: isViewerMode ? false : (!isSpaceDown && isSelected),
+        };
+      });
     });
-  }, [computedNodes, setRfNodes]);
+  }, [computedNodes, setRfNodes, isViewerMode, isSpaceDown]);
 
   useEffect(() => {
     setRfEdges(computedEdges);
   }, [computedEdges, setRfEdges]);
 
+  // Handle node selection changes to make selected nodes draggable
+  const handleNodesChange = useCallback(
+    (changes: any) => {
+      onNodesChange(changes);
+    },
+    [onNodesChange]
+  );
+
+  // When clicking on a node, make it selected and draggable
+  const onNodeClick = useCallback(
+    (_: any, node: Node) => {
+      setRfNodes((nodes) =>
+        nodes.map((n) => {
+          const isTarget = n.id === node.id;
+          return {
+            ...n,
+            selected: isTarget,
+            draggable: isViewerMode ? false : (!isSpaceDown && isTarget),
+          };
+        })
+      );
+    },
+    [setRfNodes, isViewerMode, isSpaceDown]
+  );
+
   // Deselect all nodes only when explicitly clicking on the empty canvas pane
   const onPaneClick = useCallback(() => {
-    setRfNodes((prev) => prev.map((n) => (n.selected ? { ...n, selected: false } : n)));
+    setRfNodes((prev) =>
+      prev.map((n) => ({
+        ...n,
+        selected: false,
+        draggable: false,
+      }))
+    );
   }, [setRfNodes]);
-
 
   const onNodeDragStop = useCallback(
     (_: any, node: Node, draggedNodes?: Node[]) => {
+      if (isViewerMode) return;
       const targets = draggedNodes && draggedNodes.length > 0 ? draggedNodes : [node];
       manager.doc.transact(() => {
         targets.forEach((n) => {
@@ -350,11 +417,12 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         });
       }, manager.doc.clientID);
     },
-    [manager]
+    [manager, isViewerMode]
   );
 
   const onConnect = useCallback(
     (params: Connection) => {
+      if (isViewerMode) return;
       if (params.source && params.target && params.source !== params.target) {
         setPendingCreation({
           parentId: params.source,
@@ -363,11 +431,11 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         });
       }
     },
-    []
+    [isViewerMode]
   );
 
   const handleConfirmCreate = (relType: any) => {
-    if (!pendingCreation) return;
+    if (!pendingCreation || isViewerMode) return;
     const targetMult = pendingCreation.multiplicity;
     const isOneToOne = ['optional-one', 'mandatory-one', 'one'].includes(targetMult);
     const cardinality = isOneToOne ? 'one-to-one' : 'one-to-many';
@@ -405,15 +473,14 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     [manager, reactFlowInstanceRef]
   );
 
-  // Real-time Spacebar Pan Cursor Detection
-  const [isSpaceDown, setIsSpaceDown] = useState(false);
-
+  // Spacebar pan listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
       if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault();
         setIsSpaceDown(true);
       }
     };
@@ -430,7 +497,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('blur', handleWindowWindowBlur => handleWindowBlur());
+    window.addEventListener('blur', handleWindowBlur);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
@@ -479,7 +546,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
       }`}
     >
       {/* Floating Relationship Mode Banner */}
-      {activeTool.startsWith('rel-') && (
+      {activeTool.startsWith('rel-') && !isViewerMode && (
         <div className="absolute top-3 left-1/2 -translate-x-1/2 z-40 bg-[#1e1e1e]/95 border border-[#0c8ce9] text-white px-3.5 py-1.5 rounded-full shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs whitespace-nowrap">
           <span className="relative flex h-2 w-2 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
@@ -507,11 +574,12 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         edges={rfEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         onPaneClick={onPaneClick}
-        onConnect={onConnect}
+        onConnect={isViewerMode ? undefined : onConnect}
         onInit={(instance) => {
           if (reactFlowInstanceRef) {
             reactFlowInstanceRef.current = instance;
@@ -521,11 +589,11 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         colorMode={isLightBg ? 'light' : 'dark'}
         minZoom={0.1}
         maxZoom={2.5}
-        selectionOnDrag={!isRelToolActive}
+        selectionOnDrag={!isRelToolActive && !isSpaceDown && !isViewerMode}
         selectionMode={SelectionMode.Partial}
-        panOnDrag={isRelToolActive ? [0, 1, 2] : [1, 2]}
+        panOnDrag={isSpaceDown || isRelToolActive ? [0, 1, 2] : [1, 2]}
         panOnScroll={true}
-        nodesDraggable={true}
+        nodesDraggable={!isViewerMode && !isSpaceDown}
         elementsSelectable={true}
         multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
         defaultEdgeOptions={{ type: 'relationshipEdge' }}
@@ -557,7 +625,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
 
       {/* Relationship Creation Modal */}
       <CreateRelationshipModal
-        isOpen={!!pendingCreation}
+        isOpen={!!pendingCreation && !isViewerMode}
         onClose={() => setPendingCreation(null)}
         parentTableName={pendingParentTable?.physicalName || 'Parent'}
         childTableName={pendingChildTable?.physicalName || 'Child'}
@@ -567,7 +635,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
 
       {/* Relationship Edit Modal */}
       <RelationshipModal
-        isOpen={!!editingRelationship}
+        isOpen={!!editingRelationship && !isViewerMode}
         onClose={() => setEditingRelationship(null)}
         relationship={editingRelationship}
         parentTableName={parentTable?.physicalName || 'Parent'}
@@ -579,6 +647,34 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         }}
         onDelete={(rId) => deleteRelationshipAction(manager, rId)}
       />
+
+      {/* Manual FK Modal */}
+      {manualFkTarget && (
+        <ManualFkModal
+          isOpen={!!manualFkTarget}
+          onClose={() => setManualFkTarget(null)}
+          currentTable={manualFkTarget.table}
+          currentColumn={manualFkTarget.column}
+          allTables={tables}
+          relationships={relationships}
+          onAttachFk={(params) => {
+            attachManualFkAction(
+              manager,
+              manualFkTarget.table.id,
+              manualFkTarget.column.id,
+              params.parentTableId,
+              params.parentColumnId,
+              params.relationshipType,
+              'one-to-many',
+              params.sourceMultiplicity,
+              params.targetMultiplicity
+            );
+          }}
+          onDetachFk={() => {
+            detachFkAction(manager, manualFkTarget.table.id, manualFkTarget.column.id);
+          }}
+        />
+      )}
     </div>
   );
 };

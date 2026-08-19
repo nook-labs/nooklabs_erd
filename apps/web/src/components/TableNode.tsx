@@ -22,6 +22,8 @@ export interface TableNodeData {
   zoomLabelScale?: number;
   isSourceCandidate?: boolean;
   isTargetCandidate?: boolean;
+  isViewerMode?: boolean;
+  onOpenManualFk?: (table: TableModel, column: ColumnModel) => void;
   onUpdateTable: (tableId: string, updates: Partial<TableModel>) => void;
   onDuplicateTable: (tableId: string) => void;
   onDeleteTable: (tableId: string) => void;
@@ -67,8 +69,10 @@ interface ColumnInputProps {
   placeholder?: string;
   className?: string;
   title?: string;
+  disabled?: boolean;
   onCommit: (val: string) => void;
   onEnterPress?: () => void;
+  onShiftEnterPress?: () => void;
   onFocus?: () => void;
 }
 
@@ -77,8 +81,10 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
   placeholder,
   className,
   title,
+  disabled = false,
   onCommit,
   onEnterPress,
+  onShiftEnterPress,
   onFocus,
 }) => {
   const [val, setVal] = useState(initialValue || '');
@@ -92,13 +98,16 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
   }, [initialValue]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (disabled) return;
     const next = e.target.value;
     setVal(next);
   };
 
   const handleBlur = () => {
     isFocusedRef.current = false;
-    onCommit(val);
+    if (!disabled) {
+      onCommit(val);
+    }
   };
 
   const handleFocus = () => {
@@ -107,9 +116,15 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled) return;
     if (e.key === 'Enter' && !isComposingRef.current) {
       onCommit(val);
-      onEnterPress?.();
+      if (e.shiftKey) {
+        e.preventDefault();
+        onShiftEnterPress?.();
+      } else {
+        onEnterPress?.();
+      }
     }
   };
 
@@ -117,9 +132,10 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
     <input
       type="text"
       value={val}
+      disabled={disabled}
       placeholder={placeholder}
       title={title || placeholder}
-      className={className}
+      className={`${className} ${disabled ? 'cursor-default select-text opacity-90' : ''}`}
       onChange={handleChange}
       onFocus={handleFocus}
       onBlur={handleBlur}
@@ -129,7 +145,9 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
       }}
       onCompositionEnd={() => {
         isComposingRef.current = false;
-        onCommit(val);
+        if (!disabled) {
+          onCommit(val);
+        }
       }}
     />
   );
@@ -207,6 +225,8 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
     domains = [],
     isSourceCandidate,
     isTargetCandidate,
+    isViewerMode = false,
+    onOpenManualFk,
     onUpdateTable,
     onDuplicateTable,
     onDeleteTable,
@@ -599,8 +619,8 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           ) : (
             <div
               className="font-bold text-white truncate cursor-pointer hover:opacity-90 flex items-center gap-2 transition-opacity"
-              onDoubleClick={() => setIsEditingTitle(true)}
-              title="더블 클릭하여 테이블 이름 수정"
+              onDoubleClick={() => !isViewerMode && setIsEditingTitle(true)}
+              title={isViewerMode ? table.physicalName : '더블 클릭하여 테이블 이름 수정'}
             >
               {displayMode === 'logical' ? (
                 <span className="tracking-tight text-white font-extrabold text-[13px]">
@@ -629,68 +649,73 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           )}
         </div>
 
-        {/* Action Icons in Header */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity nodrag">
-          {/* Color Picker */}
-          <div className="relative" ref={colorPickerRef}>
+        {/* Action Icons in Header (Hidden in Viewer Mode) */}
+        {!isViewerMode && (
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity nodrag">
+            {/* Color Picker */}
+            <div className="relative" ref={colorPickerRef}>
+              <button
+                onClick={() => setShowColorPicker(!showColorPicker)}
+                className="p-1 hover:bg-black/20 rounded text-white/80 hover:text-white transition-colors"
+                title="테마 색상 변경"
+              >
+                <Palette className="w-3.5 h-3.5" />
+              </button>
+              {showColorPicker && (
+                <div className="absolute right-0 top-7 z-50 bg-[#1e1e1e] border border-white/[0.15] p-2 rounded-lg shadow-2xl grid grid-cols-4 gap-1.5 w-36 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
+                  {THEME_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => {
+                        onUpdateTable(table.id, { headerColor: c });
+                        setShowColorPicker(false);
+                      }}
+                      style={{ backgroundColor: c }}
+                      className="w-5 h-5 rounded-full border border-white/20 hover:scale-125 transition-transform"
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Duplicate */}
             <button
-              onClick={() => setShowColorPicker(!showColorPicker)}
+              onClick={() => onDuplicateTable(table.id)}
               className="p-1 hover:bg-black/20 rounded text-white/80 hover:text-white transition-colors"
-              title="테마 색상 변경"
+              title="테이블 복제"
             >
-              <Palette className="w-3.5 h-3.5" />
+              <Copy className="w-3.5 h-3.5" />
             </button>
-            {showColorPicker && (
-              <div className="absolute right-0 top-7 z-50 bg-[#1e1e1e] border border-white/[0.15] p-2 rounded-lg shadow-2xl grid grid-cols-4 gap-1.5 w-36 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
-                {THEME_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => {
-                      onUpdateTable(table.id, { headerColor: c });
-                      setShowColorPicker(false);
-                    }}
-                    style={{ backgroundColor: c }}
-                    className="w-5 h-5 rounded-full border border-white/20 hover:scale-125 transition-transform"
-                  />
-                ))}
-              </div>
-            )}
+
+            {/* Add Column to bottom */}
+            <button
+              onClick={() => onAddColumn(table.id)}
+              className="p-1 hover:bg-black/20 rounded text-white/90 hover:text-white transition-colors"
+              title="컬럼 추가 (Shift+Enter)"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+
+            {/* Delete Table */}
+            <button
+              onClick={() => onDeleteTable(table.id)}
+              className="p-1 hover:bg-rose-900/60 rounded text-white/80 hover:text-rose-200 transition-colors"
+              title="테이블 삭제"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
           </div>
-
-          {/* Duplicate */}
-          <button
-            onClick={() => onDuplicateTable(table.id)}
-            className="p-1 hover:bg-black/20 rounded text-white/80 hover:text-white transition-colors"
-            title="테이블 복제"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Add Column to bottom */}
-          <button
-            onClick={() => onAddColumn(table.id)}
-            className="p-1 hover:bg-black/20 rounded text-white/90 hover:text-white transition-colors"
-            title="컬럼 추가"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-
-          {/* Delete Table */}
-          <button
-            onClick={() => onDeleteTable(table.id)}
-            className="p-1 hover:bg-rose-900/60 rounded text-white/80 hover:text-rose-200 transition-colors"
-            title="테이블 삭제"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        )}
       </div>
 
       {/* ERD Cloud Style Columns Table Header (Excel-like Resizable) */}
       <div className="bg-[#193223]/90 px-2 py-1 text-[10px] text-emerald-300/80 border-b border-emerald-900/40 flex items-center font-mono tracking-tight select-none">
-        {/* Grip Handle & KEY Header */}
-        <div className="w-8 shrink-0 text-center font-bold text-emerald-400">#</div>
-        <div className="w-7 shrink-0 text-center font-bold text-emerald-400">KEY</div>
+        {/* Highlight Dot Gutter */}
+        <div className="w-4 shrink-0 text-center" title="속성 강조/체크 표시">●</div>
+        {/* Grip Handle & Row Number Header */}
+        <div className="w-6 shrink-0 text-center font-bold text-emerald-400">#</div>
+        {/* KEY Header */}
+        <div className="w-10 shrink-0 text-center font-bold text-emerald-400">KEY</div>
         
         {displayMode !== 'physical' && (
           <div
@@ -698,7 +723,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
             className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
           >
             <span className="truncate">논리명</span>
-            {renderResizer('logicalName', '논리명')}
+            {!isViewerMode && renderResizer('logicalName', '논리명')}
           </div>
         )}
 
@@ -708,7 +733,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
             className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
           >
             <span className="truncate">물리명</span>
-            {renderResizer('physicalName', '물리명')}
+            {!isViewerMode && renderResizer('physicalName', '물리명')}
           </div>
         )}
 
@@ -717,7 +742,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Domain</span>
-          {renderResizer('domain', 'Domain')}
+          {!isViewerMode && renderResizer('domain', 'Domain')}
         </div>
 
         <div
@@ -725,7 +750,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Type</span>
-          {renderResizer('type', 'Type')}
+          {!isViewerMode && renderResizer('type', 'Type')}
         </div>
 
         <div className="w-16 shrink-0 text-center font-semibold">NOT NULL</div>
@@ -735,7 +760,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Default value</span>
-          {renderResizer('defaultValue', 'Default value')}
+          {!isViewerMode && renderResizer('defaultValue', 'Default value')}
         </div>
 
         <div
@@ -743,11 +768,11 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Comment</span>
-          {renderResizer('comment', 'Comment')}
+          {!isViewerMode && renderResizer('comment', 'Comment')}
         </div>
 
         {/* Row actions space */}
-        <div className="w-14 shrink-0"></div>
+        {!isViewerMode && <div className="w-14 shrink-0"></div>}
       </div>
 
       {/* Columns List (ERD Cloud Grid Row with Drag & Drop Reordering) */}
@@ -759,10 +784,10 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           return (
             <div
               key={col.id}
-              draggable
-              onDragStart={(e) => handleDragStart(e, col.id)}
-              onDragOver={(e) => handleDragOver(e, col.id)}
-              onDrop={(e) => handleDrop(e, col.id)}
+              draggable={!isViewerMode}
+              onDragStart={(e) => !isViewerMode && handleDragStart(e, col.id)}
+              onDragOver={(e) => !isViewerMode && handleDragOver(e, col.id)}
+              onDrop={(e) => !isViewerMode && handleDrop(e, col.id)}
               onDragEnd={handleDragEnd}
               onDoubleClick={(e) => e.stopPropagation()}
               className={`px-2 py-0.5 flex items-center gap-0.5 hover:bg-white/[0.04] group/col transition-colors text-white relative ${
@@ -773,38 +798,90 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                   : isDragTarget && dragOverPosition === 'below'
                   ? 'border-b-2 !border-b-emerald-400'
                   : ''
-              }`}
+              } ${col.isHighlighted ? 'bg-rose-950/20' : ''}`}
             >
+              {/* Highlight / Breakpoint Red Dot Marker */}
+              <div className="w-4 shrink-0 flex items-center justify-center nodrag">
+                <button
+                  type="button"
+                  disabled={isViewerMode}
+                  onClick={() =>
+                    !isViewerMode &&
+                    onUpdateColumn(table.id, col.id, { isHighlighted: !col.isHighlighted })
+                  }
+                  className={`w-3.5 h-3.5 flex items-center justify-center rounded-full transition-all ${
+                    col.isHighlighted
+                      ? 'opacity-100'
+                      : isViewerMode
+                      ? 'opacity-0'
+                      : 'opacity-0 group-hover/col:opacity-40 hover:!opacity-90'
+                  }`}
+                  title={
+                    col.isHighlighted
+                      ? '체크/강조 해제 (클릭)'
+                      : '체크/검토 필요 표시 (VS Code 스타일 중단점 클릭)'
+                  }
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      col.isHighlighted
+                        ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.95)] ring-2 ring-rose-500/40 scale-110'
+                        : 'bg-rose-400/70 hover:bg-rose-500'
+                    }`}
+                  />
+                </button>
+              </div>
+
               {/* Excel-like Row Number (1, 2, 3...) & Drag Handle on Hover */}
               <div
-                className="w-8 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold text-neutral-400 group-hover/col:text-emerald-300 cursor-grab active:cursor-grabbing nodrag select-none"
-                title={`${index + 1}번째 행 (드래그하여 순서 변경)`}
+                className={`w-6 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold text-neutral-400 ${
+                  !isViewerMode ? 'group-hover/col:text-emerald-300 cursor-grab active:cursor-grabbing' : ''
+                } nodrag select-none`}
+                title={`${index + 1}번째 행${!isViewerMode ? ' (드래그하여 순서 변경)' : ''}`}
               >
-                <span className="group-hover/col:hidden">{index + 1}</span>
-                <GripVertical className="w-3.5 h-3.5 hidden group-hover/col:block text-emerald-400" />
+                <span className={!isViewerMode ? 'group-hover/col:hidden' : ''}>{index + 1}</span>
+                {!isViewerMode && (
+                  <GripVertical className="w-3.5 h-3.5 hidden group-hover/col:block text-emerald-400" />
+                )}
               </div>
 
               {/* Key Indicators (PK / FK) */}
-              <div className="w-7 shrink-0 flex items-center justify-center gap-0.5 nodrag">
+              <div className="w-10 shrink-0 flex items-center justify-center gap-0.5 nodrag">
                 <button
-                  onClick={() => onUpdateColumn(table.id, col.id, { isPk: !col.isPk })}
+                  disabled={isViewerMode}
+                  onClick={() => !isViewerMode && onUpdateColumn(table.id, col.id, { isPk: !col.isPk })}
                   className={`p-0.5 rounded transition-all ${
                     col.isPk
                       ? 'text-amber-300 bg-amber-400/20 border border-amber-400/40 shadow-sm'
+                      : isViewerMode
+                      ? 'text-transparent cursor-default'
                       : 'text-neutral-600 hover:text-neutral-400 opacity-25 hover:opacity-100'
                   }`}
-                  title="기본키 (Primary Key) 설정/해제"
+                  title={isViewerMode ? (col.isPk ? '기본키 (PK)' : '') : '기본키 (Primary Key) 설정/해제'}
                 >
                   <Key className="w-3 h-3" />
                 </button>
 
-                {col.isFk && (
-                  <span
-                    className="text-sky-300 font-bold text-[8px] bg-sky-500/20 px-0.5 rounded border border-sky-400/30 cursor-default"
-                    title="외래키 (Foreign Key)"
+                {/* FK Button / Badge (Interactive) */}
+                {col.isFk ? (
+                  <button
+                    disabled={isViewerMode}
+                    onClick={() => !isViewerMode && onOpenManualFk?.(table, col)}
+                    className="text-sky-300 font-bold text-[8.5px] bg-sky-500/20 hover:bg-sky-500/35 px-1 py-0.2 rounded border border-sky-400/40 shadow-sm transition-all"
+                    title={isViewerMode ? '외래키 (FK)' : '외래키(FK) 설정 보기 / 수정'}
                   >
                     FK
-                  </span>
+                  </button>
+                ) : (
+                  !isViewerMode && (
+                    <button
+                      onClick={() => onOpenManualFk?.(table, col)}
+                      className="text-neutral-500 hover:text-sky-300 font-bold text-[8px] opacity-0 group-hover/col:opacity-70 hover:!opacity-100 px-0.5 py-0.2 rounded border border-white/10 hover:border-sky-400/30 hover:bg-sky-500/15 transition-all"
+                      title="수동 외래키(FK) 지정"
+                    >
+                      FK
+                    </button>
+                  )
                 )}
               </div>
 
@@ -817,10 +894,11 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`logic_${col.id}`}
                     initialValue={col.logicalName}
+                    disabled={isViewerMode}
                     placeholder="논리명"
                     className="bg-transparent text-white/95 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-medium"
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { logicalName: val })}
-                    onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                    onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
                   />
                 </div>
               )}
@@ -834,10 +912,11 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`phys_${col.id}`}
                     initialValue={col.physicalName}
+                    disabled={isViewerMode}
                     placeholder="물리명"
                     className="bg-transparent text-white focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-semibold font-mono"
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { physicalName: val })}
-                    onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                    onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
                   />
                 </div>
               )}
@@ -851,17 +930,18 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`domain_${col.id}`}
                     initialValue={col.domain}
+                    disabled={isViewerMode}
                     placeholder="Domain"
                     className="bg-transparent text-emerald-200/90 placeholder:text-neutral-500/60 px-1 py-0.5 outline-none w-full text-[10.5px] italic"
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { domain: val })}
-                    onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                    onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
                     onFocus={() => {
-                      if (domains.length > 0) {
+                      if (!isViewerMode && domains.length > 0) {
                         setActiveDomainDropdown(col.id);
                       }
                     }}
                   />
-                  {domains.length > 0 && (
+                  {!isViewerMode && domains.length > 0 && (
                     <button
                       onClick={() =>
                         setActiveDomainDropdown(activeDomainDropdown === col.id ? null : col.id)
@@ -875,7 +955,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 </div>
 
                 {/* Domain Autocomplete Dropdown */}
-                {activeDomainDropdown === col.id && domains.length > 0 && (
+                {!isViewerMode && activeDomainDropdown === col.id && domains.length > 0 && (
                   <div
                     ref={domainDropdownRef}
                     onWheel={(e) => e.stopPropagation()}
@@ -929,13 +1009,17 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 <div className="flex items-center bg-transparent rounded border border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40">
                   <input
                     type="text"
-                    className="bg-transparent text-emerald-300 px-1 py-0.5 outline-none w-full text-[10.5px] font-mono lowercase"
+                    disabled={isViewerMode}
+                    className={`bg-transparent text-emerald-300 px-1 py-0.5 outline-none w-full text-[10.5px] font-mono lowercase ${
+                      isViewerMode ? 'cursor-default' : ''
+                    }`}
                     value={
                       col.type.name
                         ? `${col.type.name.toLowerCase()}${col.type.length ? `(${col.type.length})` : ''}`
                         : ''
                     }
                     onChange={(e) => {
+                      if (isViewerMode) return;
                       const val = e.target.value;
                       const match = val.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
                       if (match) {
@@ -952,22 +1036,26 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                       }
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') onAddColumn(table.id, undefined, index + 1);
+                      if (!isViewerMode && e.shiftKey && e.key === 'Enter') {
+                        onAddColumn(table.id, undefined, index + 1);
+                      }
                     }}
                   />
-                  <button
-                    onClick={() =>
-                      setActiveTypeDropdown(activeTypeDropdown === col.id ? null : col.id)
-                    }
-                    className="text-neutral-400 hover:text-white p-0.5 transition-colors shrink-0"
-                    title="타입 선택"
-                  >
-                    <ChevronDown className="w-3 h-3" />
-                  </button>
+                  {!isViewerMode && (
+                    <button
+                      onClick={() =>
+                        setActiveTypeDropdown(activeTypeDropdown === col.id ? null : col.id)
+                      }
+                      className="text-neutral-400 hover:text-white p-0.5 transition-colors shrink-0"
+                      title="타입 선택"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
 
                 {/* Type Dropdown Menu (Scrollable & Outside Click Closeable) */}
-                {activeTypeDropdown === col.id && (
+                {!isViewerMode && activeTypeDropdown === col.id && (
                   <div
                     ref={dropdownRef}
                     onWheel={(e) => e.stopPropagation()}
@@ -1006,12 +1094,13 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
               {/* NOT NULL / NULL Toggle */}
               <div className="w-16 shrink-0 text-center nodrag px-0.5">
                 <button
-                  onClick={() => onUpdateColumn(table.id, col.id, { nullable: !col.nullable })}
+                  disabled={isViewerMode}
+                  onClick={() => !isViewerMode && onUpdateColumn(table.id, col.id, { nullable: !col.nullable })}
                   className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded font-bold transition-all ${
                     !col.nullable
                       ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-500/30'
                       : 'text-neutral-400 hover:text-neutral-200'
-                  }`}
+                  } ${isViewerMode ? 'cursor-default' : ''}`}
                   title={col.nullable ? 'NULL 허용' : 'NOT NULL (필수)'}
                 >
                   {col.nullable ? 'NULL' : 'NOT NULL'}
@@ -1026,10 +1115,11 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 <ColumnInput
                   key={`def_${col.id}`}
                   initialValue={col.defaultExpression}
+                  disabled={isViewerMode}
                   placeholder="Default value"
                   className="bg-transparent text-amber-200/90 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px] font-mono"
                   onCommit={(val) => onUpdateColumn(table.id, col.id, { defaultExpression: val })}
-                  onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                  onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
                 />
               </div>
 
@@ -1041,74 +1131,79 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 <ColumnInput
                   key={`cmt_${col.id}`}
                   initialValue={col.comment}
+                  disabled={isViewerMode}
                   placeholder="Comment"
                   className="bg-transparent text-neutral-300 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px]"
                   onCommit={(val) => onUpdateColumn(table.id, col.id, { comment: val })}
-                  onEnterPress={() => onAddColumn(table.id, undefined, index + 1)}
+                  onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
                 />
               </div>
 
-              {/* Action Buttons: Move Up, Move Down, Insert Below, Delete */}
-              <div className="w-14 shrink-0 nodrag flex items-center justify-end gap-0.5 opacity-0 group-hover/col:opacity-100 transition-opacity">
-                {/* Move Up */}
-                <button
-                  disabled={index === 0}
-                  onClick={() => handleMove(col.id, 'up')}
-                  className={`p-0.5 rounded transition-colors ${
-                    index === 0
-                      ? 'text-neutral-700 cursor-not-allowed'
-                      : 'text-neutral-400 hover:text-emerald-300 hover:bg-white/10'
-                  }`}
-                  title="위로 이동"
-                >
-                  <ChevronUp className="w-3 h-3" />
-                </button>
+              {/* Action Buttons: Move Up, Move Down, Insert Below, Delete (Hidden in Viewer Mode) */}
+              {!isViewerMode && (
+                <div className="w-14 shrink-0 nodrag flex items-center justify-end gap-0.5 opacity-0 group-hover/col:opacity-100 transition-opacity">
+                  {/* Move Up */}
+                  <button
+                    disabled={index === 0}
+                    onClick={() => handleMove(col.id, 'up')}
+                    className={`p-0.5 rounded transition-colors ${
+                      index === 0
+                        ? 'text-neutral-700 cursor-not-allowed'
+                        : 'text-neutral-400 hover:text-emerald-300 hover:bg-white/10'
+                    }`}
+                    title="위로 이동"
+                  >
+                    <ChevronUp className="w-3 h-3" />
+                  </button>
 
-                {/* Move Down */}
-                <button
-                  disabled={index === columns.length - 1}
-                  onClick={() => handleMove(col.id, 'down')}
-                  className={`p-0.5 rounded transition-colors ${
-                    index === columns.length - 1
-                      ? 'text-neutral-700 cursor-not-allowed'
-                      : 'text-neutral-400 hover:text-emerald-300 hover:bg-white/10'
-                  }`}
-                  title="아래로 이동"
-                >
-                  <ChevronDown className="w-3 h-3" />
-                </button>
+                  {/* Move Down */}
+                  <button
+                    disabled={index === columns.length - 1}
+                    onClick={() => handleMove(col.id, 'down')}
+                    className={`p-0.5 rounded transition-colors ${
+                      index === columns.length - 1
+                        ? 'text-neutral-700 cursor-not-allowed'
+                        : 'text-neutral-400 hover:text-emerald-300 hover:bg-white/10'
+                    }`}
+                    title="아래로 이동"
+                  >
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
 
-                {/* Insert Below */}
-                <button
-                  onClick={() => onAddColumn(table.id, undefined, index + 1)}
-                  className="p-0.5 text-neutral-400 hover:text-emerald-300 hover:bg-white/10 rounded transition-colors"
-                  title="이 위치 아래에 새 컬럼 삽입"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
+                  {/* Insert Below */}
+                  <button
+                    onClick={() => onAddColumn(table.id, undefined, index + 1)}
+                    className="p-0.5 text-neutral-400 hover:text-emerald-300 hover:bg-white/10 rounded transition-colors"
+                    title="이 위치 아래에 새 컬럼 삽입 (Shift+Enter)"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
 
-                {/* Delete Column */}
-                <button
-                  onClick={() => onDeleteColumn(table.id, col.id)}
-                  className="p-0.5 text-neutral-400 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors"
-                  title="컬럼 삭제"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
+                  {/* Delete Column */}
+                  <button
+                    onClick={() => onDeleteColumn(table.id, col.id)}
+                    className="p-0.5 text-neutral-400 hover:text-rose-400 hover:bg-rose-950/40 rounded transition-colors"
+                    title="컬럼 삭제"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Quick Add Row Button to bottom */}
-      <button
-        onClick={() => onAddColumn(table.id)}
-        className="w-full py-1 bg-[#16241a] hover:bg-[#1f3325] text-neutral-300 hover:text-emerald-300 text-[10.5px] font-medium flex items-center justify-center gap-1.5 border-t border-emerald-900/30 rounded-b-lg transition-colors nodrag"
-      >
-        <Plus className="w-3 h-3 text-emerald-400" /> 컬럼 추가 (Enter)
-        <span className="text-[10px] text-neutral-500 font-mono">({columns.length}행)</span>
-      </button>
+      {/* Quick Add Row Button to bottom (Hidden in Viewer Mode) */}
+      {!isViewerMode && (
+        <button
+          onClick={() => onAddColumn(table.id)}
+          className="w-full py-1 bg-[#16241a] hover:bg-[#1f3325] text-neutral-300 hover:text-emerald-300 text-[10.5px] font-medium flex items-center justify-center gap-1.5 border-t border-emerald-900/30 rounded-b-lg transition-colors nodrag"
+        >
+          <Plus className="w-3 h-3 text-emerald-400" /> 컬럼 추가 (Shift+Enter)
+          <span className="text-[10px] text-neutral-500 font-mono">({columns.length}행)</span>
+        </button>
+      )}
     </div>
   );
 };

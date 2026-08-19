@@ -432,6 +432,124 @@ export function deleteRelationshipAction(manager: ERDDocManager, relId: string) 
   }, manager.doc.clientID);
 }
 
+export function attachManualFkAction(
+  manager: ERDDocManager,
+  childTableId: string,
+  childColumnId: string,
+  parentTableId: string,
+  parentColumnId: string,
+  relationshipType: RelationshipType = 'non-identifying',
+  cardinality: Cardinality = 'one-to-many',
+  sourceMultiplicity?: CrowsFootMultiplicity,
+  targetMultiplicity?: CrowsFootMultiplicity
+): string | null {
+  const childTable = manager.tablesMap.get(childTableId);
+  const parentTable = manager.tablesMap.get(parentTableId);
+  if (!childTable || !parentTable) return null;
+
+  const childCol = childTable.columnsById[childColumnId];
+  const parentCol = parentTable.columnsById[parentColumnId];
+  if (!childCol || !parentCol) return null;
+
+  const relId = `rel_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  const updatedChildCol: ColumnModel = {
+    ...childCol,
+    isFk: true,
+    relationshipId: relId,
+    sourceColumnId: parentCol.id,
+  };
+
+  const updatedChildTable: TableModel = {
+    ...childTable,
+    columnsById: {
+      ...childTable.columnsById,
+      [childColumnId]: updatedChildCol,
+    },
+  };
+
+  const relationship: RelationshipModel = {
+    id: relId,
+    parentTableId,
+    childTableId,
+    columnMappings: [
+      {
+        parentColumnId: parentCol.id,
+        childColumnId: childCol.id,
+      },
+    ],
+    relationshipType,
+    cardinality,
+    sourceMultiplicity: sourceMultiplicity || 'one',
+    targetMultiplicity:
+      targetMultiplicity ||
+      (cardinality === 'one-to-one'
+        ? 'one'
+        : relationshipType === 'identifying'
+        ? 'mandatory-many'
+        : 'optional-many'),
+    onDelete: 'NO ACTION',
+    onUpdate: 'NO ACTION',
+    constraintName: `FK_${childTable.physicalName}_${parentTable.physicalName}_${Date.now().toString().slice(-4)}`,
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(childTableId, updatedChildTable);
+    manager.relationshipsMap.set(relId, relationship);
+  }, manager.doc.clientID);
+
+  return relId;
+}
+
+export function detachFkAction(
+  manager: ERDDocManager,
+  childTableId: string,
+  childColumnId: string
+) {
+  const childTable = manager.tablesMap.get(childTableId);
+  if (!childTable) return;
+
+  const col = childTable.columnsById[childColumnId];
+  if (!col) return;
+
+  const relId = col.relationshipId;
+
+  const updatedCol: ColumnModel = {
+    ...col,
+    isFk: false,
+    relationshipId: undefined,
+    sourceColumnId: undefined,
+  };
+
+  const updatedChildTable: TableModel = {
+    ...childTable,
+    columnsById: {
+      ...childTable.columnsById,
+      [childColumnId]: updatedCol,
+    },
+  };
+
+  manager.doc.transact(() => {
+    manager.tablesMap.set(childTableId, updatedChildTable);
+    if (relId) {
+      // If there are no other columns using this relId, delete relationship
+      const rel = manager.relationshipsMap.get(relId);
+      if (rel) {
+        const remainingMappings = rel.columnMappings.filter((m) => m.childColumnId !== childColumnId);
+        if (remainingMappings.length === 0) {
+          manager.relationshipsMap.delete(relId);
+        } else {
+          manager.relationshipsMap.set(relId, {
+            ...rel,
+            columnMappings: remainingMappings,
+          });
+        }
+      }
+    }
+  }, manager.doc.clientID);
+}
+
+
 // Memo Actions
 export function addMemoAction(
   manager: ERDDocManager,

@@ -56,15 +56,27 @@
 
 /* When spacebar / panning is active (Instant visual feedback on keydown) */
 .is-space-panning,
-.is-space-panning .react-flow__pane,
-.is-space-panning .react-flow__node {
+.is-space-panning .react-flow__pane {
   cursor: grab !important;
 }
 
+.is-space-panning .react-flow__node,
+.is-space-panning .react-flow__node * {
+  cursor: grab !important;
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
 .is-space-panning:active,
-.is-space-panning:active .react-flow__pane,
-.is-space-panning:active .react-flow__node {
+.is-space-panning:active .react-flow__pane {
   cursor: grabbing !important;
+}
+
+.is-space-panning:active .react-flow__node,
+.is-space-panning:active .react-flow__node * {
+  cursor: grabbing !important;
+  pointer-events: none !important;
+  user-select: none !important;
 }
 
 .react-flow.panning .react-flow__pane,

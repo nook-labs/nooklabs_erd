@@ -43,6 +43,8 @@ interface ToolbarProps {
   isVersionHistoryOpen?: boolean;
   versionCount?: number;
   tableCount?: number;
+  isViewerMode?: boolean;
+  onToggleViewerMode?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -66,6 +68,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isVersionHistoryOpen = false,
   versionCount = 0,
   tableCount = 0,
+  isViewerMode = false,
+  onToggleViewerMode,
 }) => {
   const router = useRouter();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -77,7 +81,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const warningCount = issues.filter((i) => i.severity === 'warning').length;
-  const isReadOnly = userRole === 'viewer';
+  const isReadOnly = userRole === 'viewer' || isViewerMode;
 
   const handleFinishEdit = () => {
     if (isReadOnly) return;
@@ -90,6 +94,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   };
 
   const getRoleBadge = () => {
+    if (isViewerMode) {
+      return (
+        <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
+          <Eye className="w-3 h-3 text-purple-400" /> <span>뷰어 모드</span>
+        </span>
+      );
+    }
     switch (userRole) {
       case 'owner':
         return (
@@ -263,6 +274,22 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             {versionCount > 0 && (
               <span className="text-[10px] text-emerald-400 font-bold">({versionCount})</span>
             )}
+          </button>
+        )}
+
+        {/* Viewer Mode Toggle Button */}
+        {onToggleViewerMode && (
+          <button
+            onClick={onToggleViewerMode}
+            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded text-[11px] font-semibold border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap ${
+              isViewerMode
+                ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400 shadow-md ring-1 ring-purple-400/50'
+                : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
+            }`}
+            title={isViewerMode ? '편집 모드로 전환 (클릭 시 편집 가능)' : '뷰어 모드로 전환 (편집 잠금)'}
+          >
+            <Eye className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">{isViewerMode ? '뷰어 모드 ON' : '뷰어 모드'}</span>
           </button>
         )}
 
