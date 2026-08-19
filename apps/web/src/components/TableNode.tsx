@@ -619,8 +619,8 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           ) : (
             <div
               className="font-bold text-white truncate cursor-pointer hover:opacity-90 flex items-center gap-2 transition-opacity"
-              onDoubleClick={() => !isViewerMode && setIsEditingTitle(true)}
-              title={isViewerMode ? table.physicalName : '더블 클릭하여 테이블 이름 수정'}
+              onDoubleClick={() => !isViewerMode && Boolean(selected) && setIsEditingTitle(true)}
+              title={isViewerMode ? table.physicalName : selected ? '더블 클릭하여 테이블 이름 수정' : '테이블을 클릭하여 선택 후 편집'}
             >
               {displayMode === 'logical' ? (
                 <span className="tracking-tight text-white font-extrabold text-[13px]">
@@ -649,8 +649,8 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           )}
         </div>
 
-        {/* Action Icons in Header (Hidden in Viewer Mode) */}
-        {!isViewerMode && (
+        {/* Action Icons in Header (Only when table is selected and not viewer mode) */}
+        {!isViewerMode && selected && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity nodrag">
             {/* Color Picker */}
             <div className="relative" ref={colorPickerRef}>
@@ -723,7 +723,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
             className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
           >
             <span className="truncate">논리명</span>
-            {!isViewerMode && renderResizer('logicalName', '논리명')}
+            {!isViewerMode && Boolean(selected) && renderResizer('logicalName', '논리명')}
           </div>
         )}
 
@@ -733,7 +733,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
             className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
           >
             <span className="truncate">물리명</span>
-            {!isViewerMode && renderResizer('physicalName', '물리명')}
+            {!isViewerMode && Boolean(selected) && renderResizer('physicalName', '물리명')}
           </div>
         )}
 
@@ -742,7 +742,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Domain</span>
-          {!isViewerMode && renderResizer('domain', 'Domain')}
+          {!isViewerMode && Boolean(selected) && renderResizer('domain', 'Domain')}
         </div>
 
         <div
@@ -750,7 +750,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Type</span>
-          {!isViewerMode && renderResizer('type', 'Type')}
+          {!isViewerMode && Boolean(selected) && renderResizer('type', 'Type')}
         </div>
 
         <div className="w-16 shrink-0 text-center font-semibold">NOT NULL</div>
@@ -760,7 +760,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Default value</span>
-          {!isViewerMode && renderResizer('defaultValue', 'Default value')}
+          {!isViewerMode && Boolean(selected) && renderResizer('defaultValue', 'Default value')}
         </div>
 
         <div
@@ -768,11 +768,11 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
         >
           <span className="truncate">Comment</span>
-          {!isViewerMode && renderResizer('comment', 'Comment')}
+          {!isViewerMode && Boolean(selected) && renderResizer('comment', 'Comment')}
         </div>
 
         {/* Row actions space */}
-        {!isViewerMode && <div className="w-14 shrink-0"></div>}
+        {!isViewerMode && selected && <div className="w-14 shrink-0"></div>}
       </div>
 
       {/* Columns List (ERD Cloud Grid Row with Drag & Drop Reordering) */}
@@ -780,14 +780,15 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
         {columns.map((col, index) => {
           const isDragTarget = dragOverColId === col.id;
           const isBeingDragged = draggedColId === col.id;
+          const isRowEditable = !isViewerMode && Boolean(selected);
 
           return (
             <div
               key={col.id}
-              draggable={!isViewerMode}
-              onDragStart={(e) => !isViewerMode && handleDragStart(e, col.id)}
-              onDragOver={(e) => !isViewerMode && handleDragOver(e, col.id)}
-              onDrop={(e) => !isViewerMode && handleDrop(e, col.id)}
+              draggable={isRowEditable}
+              onDragStart={(e) => isRowEditable && handleDragStart(e, col.id)}
+              onDragOver={(e) => isRowEditable && handleDragOver(e, col.id)}
+              onDrop={(e) => isRowEditable && handleDrop(e, col.id)}
               onDragEnd={handleDragEnd}
               onDoubleClick={(e) => e.stopPropagation()}
               className={`px-2 py-0.5 flex items-center gap-0.5 hover:bg-white/[0.04] group/col transition-colors text-white relative ${
@@ -832,15 +833,15 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 </button>
               </div>
 
-              {/* Excel-like Row Number (1, 2, 3...) & Drag Handle on Hover */}
+              {/* Excel-like Row Number (1, 2, 3...) & Drag Handle on Hover (when selected) */}
               <div
                 className={`w-6 shrink-0 flex items-center justify-center text-[10px] font-mono font-semibold text-neutral-400 ${
-                  !isViewerMode ? 'group-hover/col:text-emerald-300 cursor-grab active:cursor-grabbing' : ''
+                  isRowEditable ? 'group-hover/col:text-emerald-300 cursor-grab active:cursor-grabbing' : ''
                 } nodrag select-none`}
-                title={`${index + 1}번째 행${!isViewerMode ? ' (드래그하여 순서 변경)' : ''}`}
+                title={`${index + 1}번째 행${isRowEditable ? ' (드래그하여 순서 변경)' : ''}`}
               >
-                <span className={!isViewerMode ? 'group-hover/col:hidden' : ''}>{index + 1}</span>
-                {!isViewerMode && (
+                <span className={isRowEditable ? 'group-hover/col:hidden' : ''}>{index + 1}</span>
+                {isRowEditable && (
                   <GripVertical className="w-3.5 h-3.5 hidden group-hover/col:block text-emerald-400" />
                 )}
               </div>
@@ -848,16 +849,16 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
               {/* Key Indicators (PK / FK) */}
               <div className="w-10 shrink-0 flex items-center justify-center gap-0.5 nodrag">
                 <button
-                  disabled={isViewerMode}
-                  onClick={() => !isViewerMode && onUpdateColumn(table.id, col.id, { isPk: !col.isPk })}
+                  disabled={!isRowEditable}
+                  onClick={() => isRowEditable && onUpdateColumn(table.id, col.id, { isPk: !col.isPk })}
                   className={`p-0.5 rounded transition-all ${
                     col.isPk
                       ? 'text-amber-300 bg-amber-400/20 border border-amber-400/40 shadow-sm'
-                      : isViewerMode
+                      : !isRowEditable
                       ? 'text-transparent cursor-default'
                       : 'text-neutral-600 hover:text-neutral-400 opacity-25 hover:opacity-100'
                   }`}
-                  title={isViewerMode ? (col.isPk ? '기본키 (PK)' : '') : '기본키 (Primary Key) 설정/해제'}
+                  title={!isRowEditable ? (col.isPk ? '기본키 (PK)' : '') : '기본키 (Primary Key) 설정/해제'}
                 >
                   <Key className="w-3 h-3" />
                 </button>
@@ -865,15 +866,17 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 {/* FK Button / Badge (Interactive) */}
                 {col.isFk ? (
                   <button
-                    disabled={isViewerMode}
-                    onClick={() => !isViewerMode && onOpenManualFk?.(table, col)}
-                    className="text-sky-300 font-bold text-[8.5px] bg-sky-500/20 hover:bg-sky-500/35 px-1 py-0.2 rounded border border-sky-400/40 shadow-sm transition-all"
-                    title={isViewerMode ? '외래키 (FK)' : '외래키(FK) 설정 보기 / 수정'}
+                    disabled={!isRowEditable}
+                    onClick={() => isRowEditable && onOpenManualFk?.(table, col)}
+                    className={`text-sky-300 font-bold text-[8.5px] bg-sky-500/20 hover:bg-sky-500/35 px-1 py-0.2 rounded border border-sky-400/40 shadow-sm transition-all ${
+                      !isRowEditable ? 'cursor-default opacity-85' : ''
+                    }`}
+                    title={!isRowEditable ? '외래키 (FK)' : '외래키(FK) 설정 보기 / 수정'}
                   >
                     FK
                   </button>
                 ) : (
-                  !isViewerMode && (
+                  isRowEditable && (
                     <button
                       onClick={() => onOpenManualFk?.(table, col)}
                       className="text-neutral-500 hover:text-sky-300 font-bold text-[8px] opacity-0 group-hover/col:opacity-70 hover:!opacity-100 px-0.5 py-0.2 rounded border border-white/10 hover:border-sky-400/30 hover:bg-sky-500/15 transition-all"
@@ -894,11 +897,15 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`logic_${col.id}`}
                     initialValue={col.logicalName}
-                    disabled={isViewerMode}
+                    disabled={!isRowEditable}
                     placeholder="논리명"
-                    className="bg-transparent text-white/95 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-medium"
+                    className={`bg-transparent text-white/95 px-1 py-0.5 rounded border outline-none w-full text-[11px] font-medium transition-colors ${
+                      isRowEditable
+                        ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
+                        : 'border-transparent cursor-default'
+                    }`}
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { logicalName: val })}
-                    onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
+                    onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
                   />
                 </div>
               )}
@@ -912,11 +919,15 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`phys_${col.id}`}
                     initialValue={col.physicalName}
-                    disabled={isViewerMode}
+                    disabled={!isRowEditable}
                     placeholder="물리명"
-                    className="bg-transparent text-white focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[11px] font-semibold font-mono"
+                    className={`bg-transparent text-white px-1 py-0.5 rounded border outline-none w-full text-[11px] font-semibold font-mono transition-colors ${
+                      isRowEditable
+                        ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
+                        : 'border-transparent cursor-default'
+                    }`}
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { physicalName: val })}
-                    onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
+                    onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
                   />
                 </div>
               )}
@@ -926,22 +937,28 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 style={{ width: `${getWidth('domain')}px` }}
                 className="shrink-0 relative nodrag px-0.5"
               >
-                <div className="flex items-center bg-transparent rounded border border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40">
+                <div
+                  className={`flex items-center bg-transparent rounded border transition-colors ${
+                    isRowEditable
+                      ? 'border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40'
+                      : 'border-transparent'
+                  }`}
+                >
                   <ColumnInput
                     key={`domain_${col.id}`}
                     initialValue={col.domain}
-                    disabled={isViewerMode}
+                    disabled={!isRowEditable}
                     placeholder="Domain"
                     className="bg-transparent text-emerald-200/90 placeholder:text-neutral-500/60 px-1 py-0.5 outline-none w-full text-[10.5px] italic"
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { domain: val })}
-                    onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
+                    onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
                     onFocus={() => {
-                      if (!isViewerMode && domains.length > 0) {
+                      if (isRowEditable && domains.length > 0) {
                         setActiveDomainDropdown(col.id);
                       }
                     }}
                   />
-                  {!isViewerMode && domains.length > 0 && (
+                  {isRowEditable && domains.length > 0 && (
                     <button
                       onClick={() =>
                         setActiveDomainDropdown(activeDomainDropdown === col.id ? null : col.id)
@@ -955,7 +972,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 </div>
 
                 {/* Domain Autocomplete Dropdown */}
-                {!isViewerMode && activeDomainDropdown === col.id && domains.length > 0 && (
+                {isRowEditable && activeDomainDropdown === col.id && domains.length > 0 && (
                   <div
                     ref={domainDropdownRef}
                     onWheel={(e) => e.stopPropagation()}
@@ -1006,12 +1023,18 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 style={{ width: `${getWidth('type')}px` }}
                 className="shrink-0 relative nodrag px-0.5"
               >
-                <div className="flex items-center bg-transparent rounded border border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40">
+                <div
+                  className={`flex items-center bg-transparent rounded border transition-colors ${
+                    isRowEditable
+                      ? 'border-transparent hover:border-white/10 focus-within:border-emerald-500 focus-within:bg-black/40'
+                      : 'border-transparent'
+                  }`}
+                >
                   <input
                     type="text"
-                    disabled={isViewerMode}
+                    disabled={!isRowEditable}
                     className={`bg-transparent text-emerald-300 px-1 py-0.5 outline-none w-full text-[10.5px] font-mono lowercase ${
-                      isViewerMode ? 'cursor-default' : ''
+                      !isRowEditable ? 'cursor-default' : ''
                     }`}
                     value={
                       col.type.name
@@ -1019,7 +1042,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                         : ''
                     }
                     onChange={(e) => {
-                      if (isViewerMode) return;
+                      if (!isRowEditable) return;
                       const val = e.target.value;
                       const match = val.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
                       if (match) {
@@ -1036,12 +1059,12 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                       }
                     }}
                     onKeyDown={(e) => {
-                      if (!isViewerMode && e.shiftKey && e.key === 'Enter') {
+                      if (isRowEditable && e.shiftKey && e.key === 'Enter') {
                         onAddColumn(table.id, undefined, index + 1);
                       }
                     }}
                   />
-                  {!isViewerMode && (
+                  {isRowEditable && (
                     <button
                       onClick={() =>
                         setActiveTypeDropdown(activeTypeDropdown === col.id ? null : col.id)
@@ -1055,7 +1078,7 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 </div>
 
                 {/* Type Dropdown Menu (Scrollable & Outside Click Closeable) */}
-                {!isViewerMode && activeTypeDropdown === col.id && (
+                {isRowEditable && activeTypeDropdown === col.id && (
                   <div
                     ref={dropdownRef}
                     onWheel={(e) => e.stopPropagation()}
@@ -1094,13 +1117,13 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
               {/* NOT NULL / NULL Toggle */}
               <div className="w-16 shrink-0 text-center nodrag px-0.5">
                 <button
-                  disabled={isViewerMode}
-                  onClick={() => !isViewerMode && onUpdateColumn(table.id, col.id, { nullable: !col.nullable })}
+                  disabled={!isRowEditable}
+                  onClick={() => isRowEditable && onUpdateColumn(table.id, col.id, { nullable: !col.nullable })}
                   className={`text-[9.5px] font-mono px-1.5 py-0.5 rounded font-bold transition-all ${
                     !col.nullable
                       ? 'text-emerald-300 bg-emerald-500/20 border border-emerald-500/30'
                       : 'text-neutral-400 hover:text-neutral-200'
-                  } ${isViewerMode ? 'cursor-default' : ''}`}
+                  } ${!isRowEditable ? 'cursor-default' : ''}`}
                   title={col.nullable ? 'NULL 허용' : 'NOT NULL (필수)'}
                 >
                   {col.nullable ? 'NULL' : 'NOT NULL'}
@@ -1115,11 +1138,15 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 <ColumnInput
                   key={`def_${col.id}`}
                   initialValue={col.defaultExpression}
-                  disabled={isViewerMode}
+                  disabled={!isRowEditable}
                   placeholder="Default value"
-                  className="bg-transparent text-amber-200/90 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px] font-mono"
+                  className={`bg-transparent text-amber-200/90 placeholder:text-neutral-500/60 px-1 py-0.5 rounded border outline-none w-full text-[10.5px] font-mono transition-colors ${
+                    isRowEditable
+                      ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
+                      : 'border-transparent cursor-default'
+                  }`}
                   onCommit={(val) => onUpdateColumn(table.id, col.id, { defaultExpression: val })}
-                  onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
+                  onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
                 />
               </div>
 
@@ -1131,16 +1158,20 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
                 <ColumnInput
                   key={`cmt_${col.id}`}
                   initialValue={col.comment}
-                  disabled={isViewerMode}
+                  disabled={!isRowEditable}
                   placeholder="Comment"
-                  className="bg-transparent text-neutral-300 placeholder:text-neutral-500/60 focus:bg-black/40 px-1 py-0.5 rounded border border-transparent focus:border-emerald-500 outline-none w-full text-[10.5px]"
+                  className={`bg-transparent text-neutral-300 placeholder:text-neutral-500/60 px-1 py-0.5 rounded border outline-none w-full text-[10.5px] transition-colors ${
+                    isRowEditable
+                      ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
+                      : 'border-transparent cursor-default'
+                  }`}
                   onCommit={(val) => onUpdateColumn(table.id, col.id, { comment: val })}
-                  onShiftEnterPress={() => !isViewerMode && onAddColumn(table.id, undefined, index + 1)}
+                  onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
                 />
               </div>
 
-              {/* Action Buttons: Move Up, Move Down, Insert Below, Delete (Hidden in Viewer Mode) */}
-              {!isViewerMode && (
+              {/* Action Buttons: Move Up, Move Down, Insert Below, Delete (Only when table is selected) */}
+              {isRowEditable && (
                 <div className="w-14 shrink-0 nodrag flex items-center justify-end gap-0.5 opacity-0 group-hover/col:opacity-100 transition-opacity">
                   {/* Move Up */}
                   <button
@@ -1194,8 +1225,8 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
         })}
       </div>
 
-      {/* Quick Add Row Button to bottom (Hidden in Viewer Mode) */}
-      {!isViewerMode && (
+      {/* Quick Add Row Button to bottom (Only when table is selected and not in viewer mode) */}
+      {!isViewerMode && selected && (
         <button
           onClick={() => onAddColumn(table.id)}
           className="w-full py-1 bg-[#16241a] hover:bg-[#1f3325] text-neutral-300 hover:text-emerald-300 text-[10.5px] font-medium flex items-center justify-center gap-1.5 border-t border-emerald-900/30 rounded-b-lg transition-colors nodrag"

@@ -29,6 +29,7 @@ import { ShareModal } from '@/components/ShareModal';
 import { CanvasInspector, CanvasSettings } from '@/components/CanvasInspector';
 import { EntityListPanel } from '@/components/EntityListPanel';
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel';
+import { GlobalSearchModal } from '@/components/GlobalSearchModal';
 import {
   addTableAction,
   deleteTableAction,
@@ -145,6 +146,7 @@ export default function ProjectEditorPage() {
 
   // Viewer Mode State (Manual toggle for view-only safe browsing)
   const [isViewerMode, setIsViewerMode] = useState<boolean>(false);
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
 
   const [activeTool, setActiveTool] = useState<ActiveTool>('select');
   const [isIdentifyingMode, setIsIdentifyingMode] = useState<boolean>(false);
@@ -516,6 +518,13 @@ export default function ProjectEditorPage() {
   // Global Keyboard Shortcuts (Shift + T, Shift + M, V)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Global Search shortcut (Ctrl+F or Cmd+F) - works everywhere
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
+        e.preventDefault();
+        setIsGlobalSearchOpen(true);
+        return;
+      }
+
       const target = e.target as HTMLElement | null;
       if (
         target &&
@@ -551,12 +560,17 @@ export default function ProjectEditorPage() {
         }
       }
 
-      // V (선택 도구 전환: 대소문자, 한영, 물리키 KeyV 지원)
+      // V (뷰어 모드 토글: 대소문자, 한영, 물리키 KeyV 지원)
       if (!e.shiftKey && !hasModifier) {
         const key = e.key.toLowerCase();
         const code = e.code;
         if (key === 'v' || key === 'ㅍ' || code === 'KeyV') {
-          setActiveTool('select');
+          e.preventDefault();
+          setIsViewerMode((prev) => {
+            const next = !prev;
+            if (next) setActiveTool('select');
+            return next;
+          });
         }
       }
     };
@@ -565,7 +579,7 @@ export default function ProjectEditorPage() {
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [handleAddTable, handleAddMemo, isReadOnly, setActiveTool]);
+  }, [handleAddTable, handleAddMemo, isReadOnly, setActiveTool, setIsViewerMode, setIsGlobalSearchOpen]);
 
   const handleUpdateTitle = useCallback(
     (newTitle: string) => {
@@ -592,6 +606,26 @@ export default function ProjectEditorPage() {
   const handleFitView = useCallback(() => {
     reactFlowInstanceRef.current?.fitView?.({ duration: 400, padding: 0.2 });
   }, []);
+
+  // Table Focus & Selection Handler (used by Entity List & Global Search)
+  const handleFocusTable = useCallback((tableId: string) => {
+    const node = nodes[tableId];
+    if (node && reactFlowInstanceRef.current) {
+      reactFlowInstanceRef.current.setCenter(
+        node.position.x + (node.position.width || 300) / 2,
+        node.position.y + (node.position.height || 200) / 2,
+        { zoom: 1.25, duration: 600 }
+      );
+      if (reactFlowInstanceRef.current.setNodes) {
+        reactFlowInstanceRef.current.setNodes((nds: any[]) =>
+          nds.map((n) => ({
+            ...n,
+            selected: n.id === tableId,
+          }))
+        );
+      }
+    }
+  }, [nodes]);
 
   // Domain Handlers
   const handleAddDomain = useCallback(
@@ -661,6 +695,7 @@ export default function ProjectEditorPage() {
         tableCount={Object.keys(tables).length}
         isViewerMode={isViewerMode}
         onToggleViewerMode={() => setIsViewerMode((prev) => !prev)}
+        onOpenSearch={() => setIsGlobalSearchOpen(true)}
       />
 
       {/* Main Workspace Area */}
@@ -716,16 +751,7 @@ export default function ProjectEditorPage() {
             onClose={() => setIsEntityListOpen(false)}
             tables={tables}
             nodes={nodes}
-            onFocusTable={(tableId) => {
-              const node = nodes[tableId];
-              if (node && reactFlowInstanceRef.current) {
-                reactFlowInstanceRef.current.setCenter(
-                  node.position.x + (node.position.width || 300) / 2,
-                  node.position.y + (node.position.height || 200) / 2,
-                  { zoom: 1.2, duration: 600 }
-                );
-              }
-            }}
+            onFocusTable={handleFocusTable}
             onDeleteTable={handleDeleteTable}
             onAddTable={() => handleAddTable()}
             isReadOnly={isReadOnly || isViewerMode}
@@ -828,6 +854,14 @@ export default function ProjectEditorPage() {
           onMembersChange={setRegisteredMemberCount}
         />
       )}
+
+      {/* Global Search Modal (Ctrl + F: Tables & Columns) */}
+      <GlobalSearchModal
+        isOpen={isGlobalSearchOpen}
+        onClose={() => setIsGlobalSearchOpen(false)}
+        tables={tables}
+        onSelectResult={handleFocusTable}
+      />
     </div>
   );
 }

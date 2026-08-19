@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
   ListTree,
   History,
+  Search,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -45,6 +46,7 @@ interface ToolbarProps {
   tableCount?: number;
   isViewerMode?: boolean;
   onToggleViewerMode?: () => void;
+  onOpenSearch?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -70,6 +72,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   tableCount = 0,
   isViewerMode = false,
   onToggleViewerMode,
+  onOpenSearch,
 }) => {
   const router = useRouter();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -217,6 +220,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Right Section: Validation, Design Inspector Toggle, Share Button */}
       <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        {/* Global Search Trigger Button */}
+        {onOpenSearch && (
+          <button
+            onClick={onOpenSearch}
+            className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded text-[11px] font-medium border border-white/[0.08] bg-[#1e1e1e] hover:bg-[#282828] text-neutral-300 hover:text-white transition-all active:scale-[0.98] shrink-0 whitespace-nowrap shadow-sm"
+            title="테이블 및 속성 검색 (단축키: Ctrl + F)"
+          >
+            <Search className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="hidden md:inline">검색</span>
+            <kbd className="hidden lg:inline-block text-[9px] px-1 py-0.2 rounded bg-black/40 border border-white/20 font-mono text-neutral-400">
+              Ctrl+F
+            </kbd>
+          </button>
+        )}
+
         {/* Validation Issues Trigger */}
         <button
           onClick={onToggleValidation}
@@ -281,15 +299,18 @@ export const Toolbar: React.FC<ToolbarProps> = ({
         {onToggleViewerMode && (
           <button
             onClick={onToggleViewerMode}
-            className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded text-[11px] font-semibold border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap ${
+            className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded text-[11px] font-semibold border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap ${
               isViewerMode
                 ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400 shadow-md ring-1 ring-purple-400/50'
                 : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
             }`}
-            title={isViewerMode ? '편집 모드로 전환 (클릭 시 편집 가능)' : '뷰어 모드로 전환 (편집 잠금)'}
+            title={isViewerMode ? '편집 모드로 전환 (단축키: V)' : '뷰어 모드로 전환 (단축키: V / 스페이스바 없이 캔버스 이동)'}
           >
             <Eye className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden sm:inline">{isViewerMode ? '뷰어 모드 ON' : '뷰어 모드'}</span>
+            <kbd className="hidden sm:inline-block text-[9px] px-1 py-0.2 rounded bg-black/40 border border-white/20 font-mono text-neutral-300">
+              V
+            </kbd>
           </button>
         )}
 

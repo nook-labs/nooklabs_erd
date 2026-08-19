@@ -165,56 +165,108 @@ export const EntityListPanel: React.FC<EntityListPanelProps> = ({
       <div className="flex-1 overflow-y-auto divide-y divide-white/[0.04] bg-[#222222]">
         {filteredTables.length === 0 ? (
           <div className="p-8 text-center text-neutral-500 text-xs">
-            {searchQuery ? '검색된 엔티티가 없습니다.' : '생성된 테이블이 없습니다.'}
+            {searchQuery ? '검색된 엔티티 또는 속성이 없습니다.' : '생성된 테이블이 없습니다.'}
           </div>
         ) : (
           filteredTables.map((tbl) => {
             const colCount = tbl.columnOrder?.length || 0;
             const headerColor = tbl.headerColor || '#10b981';
+            const q = searchQuery.toLowerCase().trim();
+
+            // Find matching columns in this table
+            const matchedColumns = q
+              ? tbl.columnOrder
+                  .map((id) => tbl.columnsById[id])
+                  .filter(
+                    (c) =>
+                      c &&
+                      ((c.logicalName || '').toLowerCase().includes(q) ||
+                        (c.physicalName || '').toLowerCase().includes(q))
+                  )
+              : [];
 
             return (
-              <div
-                key={tbl.id}
-                onClick={() => onFocusTable(tbl.id)}
-                className="grid grid-cols-[1fr_1fr_32px] items-center px-3 py-2 hover:bg-white/[0.06] cursor-pointer group transition-colors text-xs text-neutral-200"
-                title="클릭하여 캔버스 내 해당 테이블로 이동"
-              >
-                {/* Logical Name with color badge */}
-                <div className="flex items-center gap-2 min-w-0 pr-1">
-                  <div
-                    style={{ backgroundColor: headerColor }}
-                    className="w-2 h-2 rounded-full shrink-0 shadow-sm"
-                  />
-                  <span className="font-bold text-white truncate text-[12px] group-hover:text-emerald-300 transition-colors">
-                    {tbl.logicalName || tbl.physicalName}
-                  </span>
+              <div key={tbl.id} className="flex flex-col hover:bg-white/[0.04] transition-colors">
+                <div
+                  onClick={() => onFocusTable(tbl.id)}
+                  className="grid grid-cols-[1fr_1fr_32px] items-center px-3 py-2 cursor-pointer group text-xs text-neutral-200"
+                  title="클릭하여 캔버스 내 해당 테이블로 이동"
+                >
+                  {/* Logical Name with color badge */}
+                  <div className="flex items-center gap-2 min-w-0 pr-1">
+                    <div
+                      style={{ backgroundColor: headerColor }}
+                      className="w-2 h-2 rounded-full shrink-0 shadow-sm"
+                    />
+                    <span className="font-bold text-white truncate text-[12px] group-hover:text-emerald-300 transition-colors">
+                      {tbl.logicalName || tbl.physicalName}
+                    </span>
+                  </div>
+
+                  {/* Physical Name */}
+                  <div className="font-mono text-neutral-400 group-hover:text-neutral-200 truncate pl-2 text-[11px] flex items-center justify-between">
+                    <span className="truncate">{tbl.physicalName}</span>
+                    <span className="text-[9.5px] text-neutral-500 font-sans shrink-0 mr-1">
+                      ({colCount})
+                    </span>
+                  </div>
+
+                  {/* Delete Button */}
+                  <div className="flex items-center justify-center">
+                    {!isReadOnly && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`'${tbl.logicalName || tbl.physicalName}' 테이블을 삭제하시겠습니까?`)) {
+                            onDeleteTable(tbl.id);
+                          }
+                        }}
+                        className="p-1 rounded text-neutral-500 hover:text-rose-400 hover:bg-rose-950/40 opacity-0 group-hover:opacity-100 transition-all"
+                        title="테이블 삭제"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Physical Name */}
-                <div className="font-mono text-neutral-400 group-hover:text-neutral-200 truncate pl-2 text-[11px] flex items-center justify-between">
-                  <span className="truncate">{tbl.physicalName}</span>
-                  <span className="text-[9.5px] text-neutral-500 font-sans shrink-0 mr-1">
-                    ({colCount})
-                  </span>
-                </div>
-
-                {/* Delete Button */}
-                <div className="flex items-center justify-center">
-                  {!isReadOnly && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`'${tbl.logicalName || tbl.physicalName}' 테이블을 삭제하시겠습니까?`)) {
-                          onDeleteTable(tbl.id);
-                        }
-                      }}
-                      className="p-1 rounded text-neutral-500 hover:text-rose-400 hover:bg-rose-950/40 opacity-0 group-hover:opacity-100 transition-all"
-                      title="테이블 삭제"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                {/* Matching Columns Sub-list (when search query matches columns) */}
+                {matchedColumns.length > 0 && (
+                  <div className="px-3 pb-2 pl-7 flex flex-col gap-1">
+                    <div className="text-[10px] font-semibold text-emerald-400/90 flex items-center gap-1">
+                      <span>매칭된 속성 ({matchedColumns.length}):</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {matchedColumns.map((col) => (
+                        <button
+                          key={col.id}
+                          onClick={() => onFocusTable(tbl.id)}
+                          className="px-1.5 py-0.5 rounded bg-emerald-950/50 hover:bg-emerald-900 border border-emerald-700/50 text-[10.5px] text-emerald-200 flex items-center gap-1 font-mono transition-colors"
+                          title={`${col.logicalName || col.physicalName} (${col.physicalName}) - 클릭하여 테이블로 이동`}
+                        >
+                          <span className="font-semibold text-white">
+                            {col.logicalName || col.physicalName}
+                          </span>
+                          {col.physicalName && (
+                            <span className="text-[9.5px] text-neutral-400 font-normal">
+                              ({col.physicalName})
+                            </span>
+                          )}
+                          {col.isPk && (
+                            <span className="text-[8px] bg-amber-500/20 text-amber-300 px-0.5 rounded font-bold">
+                              PK
+                            </span>
+                          )}
+                          {col.isFk && (
+                            <span className="text-[8px] bg-sky-500/20 text-sky-300 px-0.5 rounded font-bold">
+                              FK
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })

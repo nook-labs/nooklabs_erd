@@ -542,7 +542,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
       onPointerLeave={handlePointerLeave}
       style={{ backgroundColor: canvasSettings.backgroundColor }}
       className={`w-full h-full relative overflow-hidden transition-colors duration-200 ${
-        isSpaceDown ? 'is-space-panning' : ''
+        isSpaceDown || isViewerMode ? 'is-space-panning is-viewer-mode' : ''
       }`}
     >
       {/* Floating Relationship Mode Banner */}
@@ -591,7 +591,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         maxZoom={2.5}
         selectionOnDrag={!isRelToolActive && !isSpaceDown && !isViewerMode}
         selectionMode={SelectionMode.Partial}
-        panOnDrag={isSpaceDown || isRelToolActive ? [0, 1, 2] : [1, 2]}
+        panOnDrag={isViewerMode || isSpaceDown || isRelToolActive ? [0, 1, 2] : [1, 2]}
         panOnScroll={true}
         nodesDraggable={!isViewerMode && !isSpaceDown}
         elementsSelectable={true}
