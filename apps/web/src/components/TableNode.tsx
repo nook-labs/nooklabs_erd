@@ -480,6 +480,12 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
 
   return (
     <div
+      onClickCapture={() => {
+        onTableClick?.(table.id);
+      }}
+      onPointerDownCapture={() => {
+        onTableClick?.(table.id);
+      }}
       onPointerDown={(e) => {
         pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
       }}

@@ -30,12 +30,28 @@ const MEMO_THEMES: Record<string, { bg: string; border: string; text: string; pl
 
 const COLOR_KEYS = ['#fef08a', '#fed7aa', '#bbf7d0', '#bfdbfe', '#fbcfe8'];
 
-const FONT_SIZE_MAP: Record<string, { px: number; label: string }> = {
-  sm: { px: 11, label: '11px' },
-  base: { px: 13, label: '13px' },
-  lg: { px: 15, label: '15px' },
-  xl: { px: 17, label: '17px' },
-};
+// 폰트 크기 프리셋 및 변환 헬퍼 (11px ~ 80px 초대형 타이틀 지원)
+const FONT_PRESETS: { key: string; px: number; label: string }[] = [
+  { key: 'xs', px: 12, label: '소 (12px)' },
+  { key: 'base', px: 18, label: '중 (18px)' },
+  { key: 'lg', px: 26, label: '대 (26px)' },
+  { key: 'xl', px: 36, label: '특대 (36px)' },
+  { key: '2xl', px: 50, label: '초대형 (50px)' },
+  { key: '3xl', px: 68, label: '간판급 (68px)' },
+];
+
+function resolveFontSizePx(val: any): number {
+  if (typeof val === 'number') {
+    return Math.min(Math.max(val, 11), 84);
+  }
+  if (typeof val === 'string') {
+    const matched = FONT_PRESETS.find((p) => p.key === val);
+    if (matched) return matched.px;
+    const parsed = parseInt(val, 10);
+    if (!isNaN(parsed)) return Math.min(Math.max(parsed, 11), 84);
+  }
+  return 18; // 기본 18px (선명하고 편안한 본문 크기)
+}
 
 export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
   const { memo, onUpdate, onDelete } = data as unknown as MemoNodeData;
@@ -43,6 +59,7 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
   const isFocusedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [textHeight, setTextHeight] = useState(60);
+  const [isSizeMenuOpen, setIsSizeMenuOpen] = useState(false);
 
   const textStyle: MemoTextStyle = memo?.textStyle || {
     fontSize: 'base',
@@ -52,6 +69,8 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
     textDecoration: 'none',
   };
 
+  const currentFontSizePx = resolveFontSizePx(textStyle.fontSize);
+
   const handleUpdateTextStyle = (updates: Partial<MemoTextStyle>) => {
     const nextStyle: MemoTextStyle = {
       ...textStyle,
@@ -60,16 +79,22 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
     onUpdate(memo.id, { textStyle: nextStyle });
   };
 
+  // Font Size Stepper (A- / A+)
+  const handleStepFontSize = (delta: number) => {
+    const nextPx = Math.min(Math.max(currentFontSizePx + delta, 11), 84);
+    handleUpdateTextStyle({ fontSize: nextPx });
+  };
+
   // Auto-calculate textarea content height
   const updateHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = '0px';
       const scrollH = textarea.scrollHeight;
-      textarea.style.height = `${Math.max(scrollH, 60)}px`;
-      setTextHeight(Math.max(scrollH, 60));
+      textarea.style.height = `${Math.max(scrollH, currentFontSizePx * 1.5, 60)}px`;
+      setTextHeight(Math.max(scrollH, currentFontSizePx * 1.5, 60));
     }
-  }, []);
+  }, [currentFontSizePx]);
 
   useEffect(() => {
     if (!isFocusedRef.current && memo?.content !== undefined) {
@@ -106,14 +131,12 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
   // Total container minimum height: manual height or auto-expanded text height + padding/header
   const containerMinHeight = Math.max(activeHeight || 130, textHeight + 72);
 
-  const fontSizePx = FONT_SIZE_MAP[textStyle.fontSize || 'base']?.px || 13;
-
   return (
     <div
       style={{
         backgroundColor: theme.bg,
         borderColor: theme.border,
-        width: activeWidth ? `${activeWidth}px` : '250px',
+        width: activeWidth ? `${activeWidth}px` : currentFontSizePx >= 36 ? '340px' : '260px',
         minWidth: '200px',
         minHeight: `${containerMinHeight}px`,
         height: 'auto',
@@ -169,25 +192,65 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
       </div>
 
       {/* Mini Rich Text Formatting Toolbar */}
-      <div className="nodrag flex items-center justify-between gap-1 py-0.5 px-1 border-b border-black/5 text-[11px] shrink-0 select-none">
-        {/* Font Size Toggle */}
-        <div className="flex items-center gap-0.5">
-          {(['sm', 'base', 'lg', 'xl'] as const).map((sizeKey) => (
+      <div className="nodrag flex items-center justify-between gap-1 py-0.5 px-0.5 border-b border-black/5 text-[11px] shrink-0 select-none flex-wrap">
+        {/* Font Size Stepper & Dropdown (A- / A+ / Size Badge) */}
+        <div className="flex items-center gap-0.5 relative">
+          <button
+            onClick={() => handleStepFontSize(-4)}
+            style={{ color: theme.text }}
+            className="px-1 py-0.5 rounded font-black opacity-75 hover:opacity-100 hover:bg-black/5 transition-all active:scale-95 text-[10px]"
+            title="글자 작게 (A-)"
+          >
+            A-
+          </button>
+
+          {/* Current Font Size Dropdown Trigger */}
+          <div className="relative">
             <button
-              key={sizeKey}
-              onClick={() => handleUpdateTextStyle({ fontSize: sizeKey })}
+              onClick={() => setIsSizeMenuOpen((prev) => !prev)}
               style={{
                 color: theme.text,
-                backgroundColor: textStyle.fontSize === sizeKey ? theme.toolbarHover : 'transparent',
+                backgroundColor: theme.toolbarHover,
               }}
-              className={`px-1 py-0.2 rounded font-bold transition-colors ${
-                textStyle.fontSize === sizeKey ? 'font-black ring-1 ring-black/20' : 'opacity-70 hover:opacity-100'
-              }`}
-              title={`글자 크기: ${sizeKey.toUpperCase()}`}
+              className="px-1.5 py-0.5 rounded font-bold text-[10px] flex items-center gap-0.5 ring-1 ring-black/10 hover:ring-black/30 transition-all"
+              title="글자 크기 프리셋 선택"
             >
-              {sizeKey === 'sm' ? 'S' : sizeKey === 'base' ? 'M' : sizeKey === 'lg' ? 'L' : 'XL'}
+              <span>{currentFontSizePx}px</span>
             </button>
-          ))}
+
+            {/* Font Size Dropdown Popover */}
+            {isSizeMenuOpen && (
+              <div
+                className="absolute top-full left-0 mt-1 bg-white dark:bg-[#242424] text-neutral-800 dark:text-neutral-200 border border-black/10 dark:border-white/10 rounded-lg shadow-2xl py-1 z-50 min-w-[120px] backdrop-blur-md"
+                onMouseLeave={() => setIsSizeMenuOpen(false)}
+              >
+                {FONT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.key}
+                    onClick={() => {
+                      handleUpdateTextStyle({ fontSize: preset.px });
+                      setIsSizeMenuOpen(false);
+                    }}
+                    className={`w-full text-left px-2.5 py-1 text-xs flex items-center justify-between hover:bg-indigo-50 dark:hover:bg-neutral-700 transition-colors ${
+                      currentFontSizePx === preset.px ? 'font-bold text-[#0c8ce9] bg-indigo-50/50' : ''
+                    }`}
+                  >
+                    <span>{preset.label}</span>
+                    <span className="text-[10px] text-neutral-400 font-mono">{preset.px}px</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => handleStepFontSize(4)}
+            style={{ color: theme.text }}
+            className="px-1 py-0.5 rounded font-black opacity-75 hover:opacity-100 hover:bg-black/5 transition-all active:scale-95 text-[12px]"
+            title="글자 크게 (A+ / 최대 84px)"
+          >
+            A+
+          </button>
         </div>
 
         {/* Style Buttons (Bold, Italic, Underline, Strikethrough) */}
@@ -321,7 +384,7 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
         placeholder="메모를 입력하세요..."
         style={{
           color: theme.text,
-          fontSize: `${fontSizePx}px`,
+          fontSize: `${currentFontSizePx}px`,
           fontWeight: textStyle.fontWeight === 'bold' ? 700 : 500,
           fontStyle: textStyle.fontStyle || 'normal',
           textAlign: textStyle.textAlign || 'left',

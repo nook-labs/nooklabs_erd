@@ -1,9 +1,16 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'NookLabs ERD - 실시간 협업 데이터베이스 모델링 도구',
   description: 'NookLabs 실시간 멀티플레이어 ERD 모델링, 키보드 중심 컬럼 편집, MS SQL DDL 생성 도구',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({

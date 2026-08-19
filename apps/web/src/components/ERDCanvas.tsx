@@ -172,6 +172,18 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
                 setSelectedParentTableId(null);
                 setActiveTool('select');
               }
+            } else {
+              // Select table node immediately regardless of where inside the table was clicked
+              setRfNodes((prevNodes) =>
+                prevNodes.map((n) => {
+                  const isTarget = n.id === tId;
+                  return {
+                    ...n,
+                    selected: isTarget,
+                    draggable: !isSpaceDown && isTarget,
+                  };
+                })
+              );
             }
           },
         },

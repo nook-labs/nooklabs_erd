@@ -65,33 +65,33 @@ export const BottomBar: React.FC<BottomBarProps> = ({
   const userCount = Math.max(onlineUsers.length, 1);
 
   return (
-    <footer className="h-8 bg-[#2c2c2c] border-t border-white/[0.08] px-2 sm:px-3 flex items-center justify-between text-xs text-neutral-300 z-30 select-none relative shrink-0 w-full overflow-x-hidden">
+    <footer className="h-6.5 bg-[#2c2c2c] border-t border-white/[0.08] px-2 sm:px-3 flex items-center justify-between text-[11px] text-neutral-300 z-30 select-none relative shrink-0 w-full overflow-x-hidden">
       {/* Left Utilities */}
       <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
         <button
           onClick={onOpenDomain}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors shrink-0 whitespace-nowrap"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors shrink-0 whitespace-nowrap"
           title="도메인 관리"
         >
-          <FolderArchive className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="hidden sm:inline">도메인 관리</span>
+          <FolderArchive className="w-3 h-3 text-emerald-400 shrink-0" />
+          <span className="hidden sm:inline">도메인</span>
         </button>
 
         <button
           onClick={onOpenImport}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors shrink-0 whitespace-nowrap"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors shrink-0 whitespace-nowrap"
           title="불러오기 (Import)"
         >
-          <Upload className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+          <Upload className="w-3 h-3 text-sky-400 shrink-0" />
           <span className="hidden sm:inline">불러오기</span>
         </button>
 
         <button
           onClick={onOpenExport}
-          className="flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors shrink-0 whitespace-nowrap"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium hover:bg-white/[0.08] text-neutral-300 hover:text-white transition-colors shrink-0 whitespace-nowrap"
           title="내보내기 (Export)"
         >
-          <Download className="w-3.5 h-3.5 text-[#0c8ce9] shrink-0" />
+          <Download className="w-3 h-3 text-[#0c8ce9] shrink-0" />
           <span className="hidden sm:inline">내보내기</span>
         </button>
       </div>

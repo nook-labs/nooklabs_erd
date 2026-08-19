@@ -149,73 +149,73 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <aside className="w-9 sm:w-10 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-1.5 gap-1 z-30 select-none overflow-y-auto shrink-0 transition-all">
+    <aside className="w-8 sm:w-8.5 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-1 gap-0.5 z-30 select-none overflow-y-auto shrink-0 transition-all">
       {/* 0. Collapse Sidebar Button */}
       <button
         onClick={() => setIsCollapsed(true)}
-        className="w-7 h-6 sm:w-8 sm:h-6 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors mb-0.5"
+        className="w-6.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors mb-0.5"
         title="사이드바 접기 (화면 넓게 보기)"
       >
-        <PanelLeftClose className="w-3.5 h-3.5" />
+        <PanelLeftClose className="w-3 h-3" />
       </button>
 
-      <div className="w-5 h-[1px] bg-white/[0.1] my-0.2" />
+      <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
 
       {/* 1. Select Tool */}
       <button
         onClick={() => setActiveTool('select')}
-        className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded transition-all ${
+        className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
           activeTool === 'select'
             ? 'bg-[#0c8ce9] text-white shadow-sm'
             : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
         }`}
         title="선택 / 이동 (V)"
       >
-        <MousePointer2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+        <MousePointer2 className="w-3 h-3" />
       </button>
 
       {/* 2. Add Table */}
       <button
         onClick={onAddTable}
-        className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+        className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
         title="테이블 추가 (Shift + T)"
       >
-        <Table2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+        <Table2 className="w-3 h-3 text-emerald-400" />
       </button>
 
       {/* 2.5 Entity List Toggle */}
       {onToggleEntityList && (
         <button
           onClick={onToggleEntityList}
-          className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded transition-all ${
+          className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
             isEntityListOpen
               ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
           }`}
           title="엔티티 목록 (ENTITY)"
         >
-          <ListTree className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <ListTree className="w-3 h-3" />
         </button>
       )}
 
       {/* 3. Add Memo Tool (Toggles 'memo' stamp tool) */}
       <button
         onClick={() => setActiveTool(activeTool === 'memo' ? 'select' : 'memo')}
-        className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded active:scale-95 transition-all relative ${
+        className={`w-6.5 h-6.5 flex items-center justify-center rounded active:scale-95 transition-all relative ${
           activeTool === 'memo'
-            ? 'bg-amber-500 text-black font-bold shadow-md ring-2 ring-amber-300'
+            ? 'bg-amber-500 text-black font-bold shadow-md ring-1 ring-amber-300'
             : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
         }`}
         title={activeTool === 'memo' ? '메모지 스탬프 모드 활성화됨 (캔버스를 클릭하여 배치)' : '메모지 생성 (클릭 후 캔버스에 배치 / 단축키: Shift + M)'}
       >
-        <FileText className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${activeTool === 'memo' ? 'text-black' : 'text-amber-400'}`} />
+        <FileText className={`w-3 h-3 ${activeTool === 'memo' ? 'text-black' : 'text-amber-400'}`} />
         {activeTool === 'memo' && (
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full animate-ping" />
+          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping" />
         )}
       </button>
 
       {/* Divider */}
-      <div className="w-5 h-[1px] bg-white/[0.1] my-0.5" />
+      <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
 
       {/* 4~10: All 7 Crow's Foot Relationship Tools */}
       {ERD_REL_TOOLS.map((item, idx) => {
@@ -224,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             key={item.tool}
             onClick={() => setActiveTool(isSelected ? 'select' : item.tool)}
-            className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded transition-all ${
+            className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
               isSelected
                 ? 'bg-[#0c8ce9] text-white shadow-sm'
                 : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
@@ -237,41 +237,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
       })}
 
       {/* Divider */}
-      <div className="w-5 h-[1px] bg-white/[0.1] my-0.5" />
+      <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
 
       {/* Auto Layout */}
       <button
         onClick={onAutoLayout}
-        className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+        className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
         title="자동 격자 정렬 (Auto Layout)"
       >
-        <Grid3X3 className="w-3.5 h-3.5" />
+        <Grid3X3 className="w-3 h-3" />
       </button>
 
       {/* Zoom Controls at Bottom */}
       <div className="flex flex-col items-center gap-0.5 mt-auto pt-1">
         <button
           onClick={onZoomIn}
-          className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
+          className="w-5.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
           title="확대 (+)"
         >
-          <ZoomIn className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <ZoomIn className="w-2.5 h-2.5" />
         </button>
 
         <button
           onClick={onZoomOut}
-          className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
+          className="w-5.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
           title="축소 (-)"
         >
-          <ZoomOut className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <ZoomOut className="w-2.5 h-2.5" />
         </button>
 
         <button
           onClick={onFitView}
-          className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
+          className="w-5.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
           title="화면 맞춤"
         >
-          <Maximize2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <Maximize2 className="w-2.5 h-2.5" />
         </button>
       </div>
     </aside>

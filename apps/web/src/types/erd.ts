@@ -78,7 +78,7 @@ export interface TableModel {
 }
 
 export interface MemoTextStyle {
-  fontSize?: 'sm' | 'base' | 'lg' | 'xl'; // 12px, 14px, 16px, 18px
+  fontSize?: 'xs' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl' | number | string; // 10px ~ 72px 이상 자유로운 크기 지원
   fontWeight?: 'normal' | 'bold';
   fontStyle?: 'normal' | 'italic';
   textAlign?: 'left' | 'center' | 'right';
