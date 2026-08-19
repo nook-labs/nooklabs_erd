@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ActiveTool } from '@/types/erd';
 import {
   MousePointer2,
@@ -11,6 +11,10 @@ import {
   ZoomOut,
   Maximize2,
   ListTree,
+  ChevronLeft,
+  ChevronRight,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -126,8 +130,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleEntityList,
   isEntityListOpen = false,
 }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // If collapsed, show minimal floating restore button
+  if (isCollapsed) {
+    return (
+      <div className="absolute top-2 left-2 z-40">
+        <button
+          onClick={() => setIsCollapsed(false)}
+          className="p-1.5 bg-[#2c2c2c]/90 hover:bg-[#383838] border border-white/20 rounded-md shadow-xl text-neutral-300 hover:text-white transition-all backdrop-blur-md active:scale-95 flex items-center gap-1 text-[11px] font-medium"
+          title="도구 사이드바 펼치기"
+        >
+          <PanelLeft className="w-4 h-4 text-emerald-400" />
+          <span className="hidden sm:inline">도구함</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <aside className="w-9 sm:w-10 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-2 gap-1 z-30 select-none overflow-y-auto shrink-0">
+    <aside className="w-9 sm:w-10 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-1.5 gap-1 z-30 select-none overflow-y-auto shrink-0 transition-all">
+      {/* 0. Collapse Sidebar Button */}
+      <button
+        onClick={() => setIsCollapsed(true)}
+        className="w-7 h-6 sm:w-8 sm:h-6 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors mb-0.5"
+        title="사이드바 접기 (화면 넓게 보기)"
+      >
+        <PanelLeftClose className="w-3.5 h-3.5" />
+      </button>
+
+      <div className="w-5 h-[1px] bg-white/[0.1] my-0.2" />
+
       {/* 1. Select Tool */}
       <button
         onClick={() => setActiveTool('select')}
@@ -165,13 +198,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       )}
 
-      {/* 3. Add Memo / Document */}
+      {/* 3. Add Memo Tool (Toggles 'memo' stamp tool) */}
       <button
-        onClick={onAddMemo}
-        className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-        title="메모 추가 (Shift + M)"
+        onClick={() => setActiveTool(activeTool === 'memo' ? 'select' : 'memo')}
+        className={`w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center rounded active:scale-95 transition-all relative ${
+          activeTool === 'memo'
+            ? 'bg-amber-500 text-black font-bold shadow-md ring-2 ring-amber-300'
+            : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
+        }`}
+        title={activeTool === 'memo' ? '메모지 스탬프 모드 활성화됨 (캔버스를 클릭하여 배치)' : '메모지 생성 (클릭 후 캔버스에 배치 / 단축키: Shift + M)'}
       >
-        <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+        <FileText className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${activeTool === 'memo' ? 'text-black' : 'text-amber-400'}`} />
+        {activeTool === 'memo' && (
+          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-amber-400 rounded-full animate-ping" />
+        )}
       </button>
 
       {/* Divider */}

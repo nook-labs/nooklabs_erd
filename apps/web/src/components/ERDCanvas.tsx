@@ -47,6 +47,7 @@ import {
   detachFkAction,
   updateMemoAction,
   deleteMemoAction,
+  addMemoAction,
 } from '@/collaboration/actions';
 import { RelationshipModal } from './RelationshipModal';
 import { CreateRelationshipModal } from './CreateRelationshipModal';
@@ -384,16 +385,29 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     [setRfNodes, isViewerMode, isSpaceDown]
   );
 
-  // Deselect all nodes only when explicitly clicking on the empty canvas pane
-  const onPaneClick = useCallback(() => {
-    setRfNodes((prev) =>
-      prev.map((n) => ({
-        ...n,
-        selected: false,
-        draggable: false,
-      }))
-    );
-  }, [setRfNodes]);
+  // Deselect all nodes or create Memo stamp on pane click
+  const onPaneClick = useCallback(
+    (event: React.MouseEvent) => {
+      if (activeTool === 'memo' && !isViewerMode && reactFlowInstanceRef?.current) {
+        const flowPos = reactFlowInstanceRef.current.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        addMemoAction(manager, '새 메모', Math.round(flowPos.x - 125), Math.round(flowPos.y - 60));
+        setActiveTool('select');
+        return;
+      }
+
+      setRfNodes((prev) =>
+        prev.map((n) => ({
+          ...n,
+          selected: false,
+          draggable: false,
+        }))
+      );
+    },
+    [activeTool, isViewerMode, manager, reactFlowInstanceRef, setActiveTool, setRfNodes]
+  );
 
   const onNodeDragStop = useCallback(
     (_: any, node: Node, draggedNodes?: Node[]) => {
@@ -597,9 +611,11 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         elementsSelectable={true}
         multiSelectionKeyCode={['Shift', 'Control', 'Meta']}
         defaultEdgeOptions={{ type: 'relationshipEdge' }}
-        style={{ backgroundColor: canvasSettings.backgroundColor }}
+        style={{
+          backgroundColor: canvasSettings.backgroundColor,
+          cursor: activeTool === 'memo' ? 'crosshair' : undefined,
+        }}
       >
-
         {canvasSettings.gridType !== 'none' && (
           <Background
             variant={bgVariant}
@@ -621,6 +637,15 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           />
         )}
       </ReactFlow>
+
+      {/* Active Tool: Memo Stamp Banner Notice */}
+      {activeTool === 'memo' && !isViewerMode && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-amber-500 text-black px-3.5 py-1.5 rounded-full shadow-2xl font-semibold text-xs flex items-center gap-2 animate-bounce border border-amber-300 pointer-events-none">
+          <span className="w-2 h-2 rounded-full bg-black animate-pulse" />
+          <span>📝 캔버스의 원하는 위치를 클릭하면 메모가 생성됩니다</span>
+          <span className="text-[10px] bg-black/20 px-1.5 py-0.5 rounded font-mono">ESC 취소</span>
+        </div>
+      )}
 
 
       {/* Relationship Creation Modal */}

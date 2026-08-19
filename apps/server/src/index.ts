@@ -43,6 +43,11 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
 // Cache resolved project IDs to avoid repetitive DB lookups
 const documentProjectMap = new Map<string, string>();
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isUuid(str: string): boolean {
+  return UUID_REGEX.test(str);
+}
+
 async function resolveProjectId(documentName: string): Promise<string | null> {
   if (documentProjectMap.has(documentName)) {
     return documentProjectMap.get(documentName)!;
@@ -52,21 +57,26 @@ async function resolveProjectId(documentName: string): Promise<string | null> {
   let candidateId = documentName.replace(/^erd-proj-/, '');
 
   if (!supabaseAdmin) {
-    documentProjectMap.set(documentName, candidateId);
-    return candidateId;
+    if (isUuid(candidateId)) {
+      documentProjectMap.set(documentName, candidateId);
+      return candidateId;
+    }
+    return null;
   }
 
   try {
-    // 1. Try querying by id
-    const { data: byId } = await supabaseAdmin
-      .from('projects')
-      .select('id')
-      .eq('id', candidateId)
-      .maybeSingle();
+    // 1. Try querying by id if candidateId looks like a UUID
+    if (isUuid(candidateId)) {
+      const { data: byId } = await supabaseAdmin
+        .from('projects')
+        .select('id')
+        .eq('id', candidateId)
+        .maybeSingle();
 
-    if (byId?.id) {
-      documentProjectMap.set(documentName, byId.id);
-      return byId.id;
+      if (byId?.id) {
+        documentProjectMap.set(documentName, byId.id);
+        return byId.id;
+      }
     }
 
     // 2. Try querying by room_id
@@ -84,8 +94,12 @@ async function resolveProjectId(documentName: string): Promise<string | null> {
     console.warn(`[Hocuspocus] Failed to resolve projectId for room [${documentName}]:`, err.message);
   }
 
-  documentProjectMap.set(documentName, candidateId);
-  return candidateId;
+  if (isUuid(candidateId)) {
+    documentProjectMap.set(documentName, candidateId);
+    return candidateId;
+  }
+
+  return null;
 }
 
 // Local File Persistence Helpers

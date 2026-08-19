@@ -46,6 +46,11 @@ import {
   captureCurrentSnapshot,
   restoreVersionSnapshotAction,
 } from '@/collaboration/versionActions';
+import {
+  loadDocFromSupabase,
+  createDebouncedDocSaver,
+  SaveStatus,
+} from '@/collaboration/supabasePersistence';
 import { validateSchema, ValidationIssue } from '@/validation/validator';
 import { Database, Loader2 } from 'lucide-react';
 
@@ -60,6 +65,7 @@ export default function ProjectEditorPage() {
   const [manager, setManager] = useState<ERDDocManager | null>(null);
   const [isSynced, setIsSynced] = useState(false);
   const [isWsConnected, setIsWsConnected] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('synced');
 
   const [tables, setTables] = useState<Record<string, TableModel>>({});
   const [relationships, setRelationships] = useState<Record<string, RelationshipModel>>({});
@@ -159,8 +165,19 @@ export default function ProjectEditorPage() {
   const [isEntityListOpen, setIsEntityListOpen] = useState(false);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
   const [versions, setVersions] = useState<ProjectVersion[]>([]);
-
   const reactFlowInstanceRef = useRef<any>(null);
+  const mouseClientPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Track mouse screen coordinates globally for precision stamp/shortcut placement
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseClientPosRef.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+    };
+  }, []);
 
   // Load version history
   const loadVersions = useCallback(() => {
@@ -416,6 +433,22 @@ export default function ProjectEditorPage() {
       });
     }
 
+    // 1. Supabase Cloud DB에서 최신 Yjs 문서 직접 로드 (웹소켓 연결 전/실패 시에도 최신 데이터 보장)
+    loadDocFromSupabase(project.id, docMgr.doc).then((hasData) => {
+      if (hasData) {
+        handleDocumentSynced();
+      }
+    });
+
+    // 2. 편집 권한이 있을 경우 Supabase DB로 1.5초 디바운스 자동 저장기(Auto-Saver) 등록
+    let docSaver: ReturnType<typeof createDebouncedDocSaver> | null = null;
+    if (!isReadOnly) {
+      docSaver = createDebouncedDocSaver(project.id, docMgr.doc, {
+        delayMs: 1500,
+        onStatusChange: setSaveStatus,
+      });
+    }
+
     // Safety fallback timeout to release loading indicator
     const fallbackTimer = setTimeout(() => {
       setIsSynced(true);
@@ -452,6 +485,7 @@ export default function ProjectEditorPage() {
 
     return () => {
       clearTimeout(fallbackTimer);
+      docSaver?.destroy();
       docMgr.doc.off('update', syncFromYjs);
       docMgr.provider?.destroy();
       docMgr.persistence?.destroy();
@@ -486,12 +520,24 @@ export default function ProjectEditorPage() {
     }, manager.doc.clientID);
   }, [manager, tables, isReadOnly]);
 
-  // ERD Operations
+  // ERD Operations with Mouse Screen-to-Flow Coordinate Projection
   const handleAddTable = useCallback(
     (x?: number, y?: number) => {
       if (!manager || isReadOnly) return;
-      const posX = x ?? 100 + Math.random() * 200;
-      const posY = y ?? 100 + Math.random() * 200;
+      let posX = x;
+      let posY = y;
+
+      if (posX === undefined || posY === undefined) {
+        if (mouseClientPosRef.current && reactFlowInstanceRef.current?.screenToFlowPosition) {
+          const flowPos = reactFlowInstanceRef.current.screenToFlowPosition(mouseClientPosRef.current);
+          posX = Math.round(flowPos.x - 170);
+          posY = Math.round(flowPos.y - 100);
+        } else {
+          posX = 100 + Math.random() * 200;
+          posY = 100 + Math.random() * 200;
+        }
+      }
+
       addTableAction(manager, '새 테이블', 'new_table', posX, posY);
     },
     [manager, isReadOnly]
@@ -508,16 +554,33 @@ export default function ProjectEditorPage() {
   const handleAddMemo = useCallback(
     (x?: number, y?: number) => {
       if (!manager || isReadOnly) return;
-      const posX = x ?? 200 + Math.random() * 100;
-      const posY = y ?? 200 + Math.random() * 100;
+      let posX = x;
+      let posY = y;
+
+      if (posX === undefined || posY === undefined) {
+        if (mouseClientPosRef.current && reactFlowInstanceRef.current?.screenToFlowPosition) {
+          const flowPos = reactFlowInstanceRef.current.screenToFlowPosition(mouseClientPosRef.current);
+          posX = Math.round(flowPos.x - 125);
+          posY = Math.round(flowPos.y - 60);
+        } else {
+          posX = 200 + Math.random() * 100;
+          posY = 200 + Math.random() * 100;
+        }
+      }
+
       addMemoAction(manager, '새 메모', posX, posY);
     },
     [manager, isReadOnly]
   );
 
-  // Global Keyboard Shortcuts (Shift + T, Shift + M, V)
+  // Global Keyboard Shortcuts (Shift + T, Shift + M, V, ESC)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // ESC cancels active tool
+      if (e.key === 'Escape') {
+        setActiveTool('select');
+      }
+
       // Global Search shortcut (Ctrl+F or Cmd+F) - works everywhere
       if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF')) {
         e.preventDefault();
@@ -682,6 +745,7 @@ export default function ProjectEditorPage() {
         onUndo={() => manager?.undoManager.undo()}
         onRedo={() => manager?.undoManager.redo()}
         isConnected={isWsConnected}
+        saveStatus={saveStatus}
         userRole={myRole}
         onOpenShareModal={() => setIsShareModalOpen(true)}
         memberCount={registeredMemberCount}

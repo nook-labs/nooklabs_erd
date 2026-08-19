@@ -77,10 +77,19 @@ export interface TableModel {
   constraintIds: string[];
 }
 
+export interface MemoTextStyle {
+  fontSize?: 'sm' | 'base' | 'lg' | 'xl'; // 12px, 14px, 16px, 18px
+  fontWeight?: 'normal' | 'bold';
+  fontStyle?: 'normal' | 'italic';
+  textAlign?: 'left' | 'center' | 'right';
+  textDecoration?: 'none' | 'underline' | 'line-through';
+}
+
 export interface MemoModel {
   id: string;
   content: string;
   color?: string; // e.g. '#fef08a' (yellow), '#fed7aa' (orange), '#bbf7d0' (green), '#bfdbfe' (blue), '#fbcfe8' (pink)
+  textStyle?: MemoTextStyle;
   position: NodePosition;
 }
 

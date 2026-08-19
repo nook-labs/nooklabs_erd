@@ -21,6 +21,8 @@ import {
   ListTree,
   History,
   Search,
+  Cloud,
+  Loader2,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -33,6 +35,7 @@ interface ToolbarProps {
   onUndo: () => void;
   onRedo: () => void;
   isConnected: boolean;
+  saveStatus?: 'synced' | 'saving' | 'error';
   userRole?: ProjectRole;
   onOpenShareModal?: () => void;
   memberCount?: number;
@@ -59,6 +62,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onUndo,
   onRedo,
   isConnected,
+  saveStatus = 'synced',
   userRole = 'owner',
   onOpenShareModal,
   memberCount = 1,
@@ -195,6 +199,26 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           )}
 
           {getRoleBadge()}
+
+          {/* Cloud Auto-Save Status Badge */}
+          <div className="hidden sm:flex items-center gap-1 pl-1">
+            {saveStatus === 'saving' ? (
+              <span className="flex items-center gap-1 text-[10px] text-sky-400 bg-sky-950/40 border border-sky-800/60 px-1.5 py-0.5 rounded shadow-sm">
+                <Loader2 className="w-2.5 h-2.5 animate-spin shrink-0" />
+                <span className="leading-none">클라우드 저장 중</span>
+              </span>
+            ) : saveStatus === 'error' ? (
+              <span className="flex items-center gap-1 text-[10px] text-amber-400 bg-amber-950/40 border border-amber-800/60 px-1.5 py-0.5 rounded shadow-sm" title="클라우드 저장 오류 (로컬 캐시 보존됨)">
+                <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                <span className="leading-none">오프라인 보존</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400/80 hover:text-emerald-300 transition-colors" title="Supabase 클라우드에 최신 데이터 동기화 완료">
+                <Cloud className="w-3 h-3 shrink-0" />
+                <span className="leading-none hidden lg:inline">저장됨</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Undo / Redo Actions */}

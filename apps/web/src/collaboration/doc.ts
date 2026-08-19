@@ -36,13 +36,30 @@ export function createERDDoc(
 
   const roomName = options.roomName;
   let wsUrl = options.wsUrl || process.env.NEXT_PUBLIC_COLLAB_WS_URL || 'ws://localhost:1234';
-  if (
-    typeof window !== 'undefined' &&
-    (wsUrl.includes('localhost') || wsUrl.includes('127.0.0.1')) &&
-    window.location.hostname !== 'localhost' &&
-    window.location.hostname !== '127.0.0.1'
-  ) {
-    wsUrl = `ws://${window.location.hostname}:1234`;
+
+  if (typeof window !== 'undefined') {
+    const isHttps = window.location.protocol === 'https:';
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    // HTTP(S) url이 들어왔을 경우 WS(S)로 변환
+    if (wsUrl.startsWith('https://')) {
+      wsUrl = wsUrl.replace('https://', 'wss://');
+    } else if (wsUrl.startsWith('http://')) {
+      wsUrl = wsUrl.replace('http://', 'ws://');
+    }
+
+    // HTTPS 배포 환경에서 ws://로 시작하면 Mixed Content 차단 방지를 위해 wss://로 자동 승격
+    if (isHttps && wsUrl.startsWith('ws://') && !wsUrl.includes('localhost') && !wsUrl.includes('127.0.0.1')) {
+      wsUrl = wsUrl.replace('ws://', 'wss://');
+    }
+
+    // 로컬 개발 환경에서 모바일 IP 접속 시 로컬 1234 포트로 포워딩 지원
+    if ((wsUrl.includes('localhost') || wsUrl.includes('127.0.0.1')) && !isLocalhost) {
+      const isIpAddress = /^[0-9.]+$/.test(window.location.hostname);
+      if (isIpAddress) {
+        wsUrl = `ws://${window.location.hostname}:1234`;
+      }
+    }
   }
   const user = options.user;
   const token = options.token || (options.readOnly ? 'token-viewer' : 'token-editor');
