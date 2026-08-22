@@ -21,6 +21,7 @@ export type ActiveTool =
   | 'select'
   | 'table'
   | 'memo'
+  | 'diagram'
   | 'rel-optional-many'
   | 'rel-optional-one-many'
   | 'rel-optional-one'
@@ -75,6 +76,7 @@ export interface TableModel {
   primaryKeyId?: string;
   indexIds: string[];
   constraintIds: string[];
+  pageId?: string; // Figma 스타일 다중 페이지 소속
 }
 
 export interface MemoTextStyle {
@@ -91,6 +93,26 @@ export interface MemoModel {
   color?: string; // e.g. '#fef08a' (yellow), '#fed7aa' (orange), '#bbf7d0' (green), '#bfdbfe' (blue), '#fbcfe8' (pink)
   textStyle?: MemoTextStyle;
   position: NodePosition;
+  pageId?: string; // Figma 스타일 다중 페이지 소속
+}
+
+export type DiagramType = 'sequence' | 'flowchart' | 'class' | 'state' | 'er' | 'gantt' | 'pie' | 'custom';
+
+export interface DiagramModel {
+  id: string;
+  title: string;
+  type?: DiagramType;
+  code: string;
+  theme?: 'dark' | 'forest' | 'neutral' | 'default';
+  position: NodePosition;
+  pageId?: string; // Figma 스타일 다중 페이지 소속
+}
+
+export interface PageModel {
+  id: string;
+  name: string;
+  order: number;
+  icon?: string;
 }
 
 export interface ColumnMapping {
@@ -158,6 +180,7 @@ export interface UserPresence {
   selectedTableId?: string;
   selectedColumnId?: string;
   editingCell?: { tableId: string; columnId?: string; field: string };
+  activePageId?: string; // 동료가 보고 있는 페이지
 }
 
 // Version History & Snapshots
@@ -166,6 +189,8 @@ export interface ERDSnapshot {
   relationships: Record<string, RelationshipModel>;
   nodes: Record<string, NodeView>;
   memos: Record<string, MemoModel>;
+  diagrams?: Record<string, DiagramModel>;
+  pages?: Record<string, PageModel>;
   domains: DomainItem[];
   projectTitle?: string;
   meta?: any;

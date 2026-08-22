@@ -1,7 +1,7 @@
 import * as Y from 'yjs';
 import { IndexeddbPersistence } from 'y-indexeddb';
 import { HocuspocusProvider } from '@hocuspocus/provider';
-import { TableModel, RelationshipModel, NodeView, MemoModel, DomainItem } from '@/types/erd';
+import { TableModel, RelationshipModel, NodeView, MemoModel, DomainItem, DiagramModel, PageModel } from '@/types/erd';
 import { UserProfile } from '@/lib/supabase/types';
 
 export interface ERDDocManager {
@@ -10,6 +10,8 @@ export interface ERDDocManager {
   relationshipsMap: Y.Map<RelationshipModel>;
   nodesMap: Y.Map<NodeView>;
   memosMap: Y.Map<MemoModel>;
+  diagramsMap: Y.Map<DiagramModel>;
+  pagesMap: Y.Map<PageModel>;
   domainsMap: Y.Map<DomainItem>;
   metaMap: Y.Map<any>;
   provider: HocuspocusProvider | null;
@@ -70,6 +72,8 @@ export function createERDDoc(
   const relationshipsMap = doc.getMap<RelationshipModel>('relationships');
   const nodesMap = doc.getMap<NodeView>('nodes');
   const memosMap = doc.getMap<MemoModel>('memos');
+  const diagramsMap = doc.getMap<DiagramModel>('diagrams');
+  const pagesMap = doc.getMap<PageModel>('pages');
   const domainsMap = doc.getMap<DomainItem>('domains');
   const metaMap = doc.getMap<any>('meta');
 
@@ -107,7 +111,7 @@ export function createERDDoc(
   }
 
   // UndoManager restricted to local transaction origin
-  const undoManager = new Y.UndoManager([tablesMap, relationshipsMap, nodesMap, memosMap], {
+  const undoManager = new Y.UndoManager([tablesMap, relationshipsMap, nodesMap, memosMap, diagramsMap, pagesMap], {
     trackedOrigins: new Set([doc.clientID]),
   });
 
@@ -117,6 +121,8 @@ export function createERDDoc(
     relationshipsMap,
     nodesMap,
     memosMap,
+    diagramsMap,
+    pagesMap,
     domainsMap,
     metaMap,
     provider,

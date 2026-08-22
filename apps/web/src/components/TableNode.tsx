@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Handle, Position, NodeProps, useViewport } from '@xyflow/react';
+import { Handle, Position, NodeProps } from '@xyflow/react';
 import { TableModel, ColumnModel, DisplayMode, DomainItem } from '@/types/erd';
 import {
   Key,
@@ -217,7 +217,7 @@ const measureOptimalColumnWidth = (
   return Math.max(minWidth, Math.min(650, optimal));
 };
 
-export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
+const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
   const nodeData = data as unknown as TableNodeData;
   const {
     table,
@@ -456,12 +456,6 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
     });
   }, [table.id, localPhysicalName, localLogicalName, onUpdateTable]);
 
-  const { zoom } = useViewport();
-  // Activate zoom title early when zooming out (zoom < 0.95)
-  const showZoomTitle = zoom < 0.95;
-  const scaleMultiplier = Number(nodeData?.zoomLabelScale) || 1.45;
-  const titleScale = Math.min(10.0, Math.max(1.0, scaleMultiplier / zoom));
-
   const pointerDownPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Helper component for Resizer Handle
@@ -508,30 +502,6 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
           : 'border-white/[0.12] hover:border-white/[0.25]'
       }`}
     >
-      {/* Zoom-adaptive Frame Label (Clean flat style without heavy box-shadow) */}
-      {showZoomTitle && (
-        <div
-          style={{
-            transform: `translate(-50%, -100%) scale(${titleScale})`,
-            transformOrigin: 'bottom center',
-          }}
-          className="absolute left-1/2 -top-2.5 pointer-events-none z-50 whitespace-nowrap select-none font-bold text-white px-3 py-1.5 rounded-lg bg-[#18181b] border border-white/30 flex items-center gap-2"
-        >
-          <div
-            style={{ backgroundColor: headerColor }}
-            className="w-2.5 h-2.5 rounded-full shrink-0"
-          />
-          <span className="font-extrabold tracking-tight text-white text-[13px]">
-            {displayMode === 'logical' ? (table.logicalName || table.physicalName) : table.physicalName}
-          </span>
-          {displayMode === 'both' && table.logicalName && (
-            <span className="text-emerald-300 text-xs font-bold">({table.logicalName})</span>
-          )}
-          <span className="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
-            {columns.length} cols
-          </span>
-        </div>
-      )}
 
       {/* React Flow Handles for Drag Connections */}
       <Handle
@@ -1244,5 +1214,22 @@ export const TableNode: React.FC<NodeProps> = ({ data, selected }) => {
     </div>
   );
 };
+
+const areTablePropsEqual = (prevProps: NodeProps, nextProps: NodeProps): boolean => {
+  if (prevProps.selected !== nextProps.selected) return false;
+  const prevData = prevProps.data as unknown as TableNodeData;
+  const nextData = nextProps.data as unknown as TableNodeData;
+
+  if (prevData.table !== nextData.table) return false;
+  if (prevData.displayMode !== nextData.displayMode) return false;
+  if (prevData.isSourceCandidate !== nextData.isSourceCandidate) return false;
+  if (prevData.isTargetCandidate !== nextData.isTargetCandidate) return false;
+  if (prevData.isViewerMode !== nextData.isViewerMode) return false;
+  if (prevData.domains !== nextData.domains) return false;
+
+  return true;
+};
+
+export const TableNode = React.memo(TableNodeComponent, areTablePropsEqual);
 
 

@@ -9,6 +9,8 @@ import {
   CrowsFootMultiplicity,
   MemoModel,
   DomainItem,
+  DiagramModel,
+  PageModel,
 } from '@/types/erd';
 
 export function createDefaultColumn(index: number = 1): ColumnModel {
@@ -35,7 +37,8 @@ export function addTableAction(
   physicalName: string = 'new_table',
   x: number = 200,
   y: number = 200,
-  headerColor: string = '#4f46e5'
+  headerColor: string = '#4f46e5',
+  pageId?: string
 ): string {
   const tableId = `tbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const defaultCol = createDefaultColumn(1);
@@ -52,6 +55,7 @@ export function addTableAction(
     primaryKeyId: defaultCol.id,
     indexIds: [],
     constraintIds: [],
+    pageId,
   };
 
   const nodeView: NodeView = {
@@ -556,7 +560,8 @@ export function addMemoAction(
   content: string = '새로운 메모를 입력하세요...',
   x: number = 300,
   y: number = 300,
-  color: string = '#fef08a'
+  color: string = '#fef08a',
+  pageId?: string
 ): string {
   const memoId = `memo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const memo: MemoModel = {
@@ -564,6 +569,7 @@ export function addMemoAction(
     content,
     color,
     position: { x, y, width: 220, height: 160 },
+    pageId,
   };
 
   manager.doc.transact(() => {
@@ -597,6 +603,225 @@ export function updateMemoAction(
 export function deleteMemoAction(manager: ERDDocManager, memoId: string) {
   manager.doc.transact(() => {
     manager.memosMap.delete(memoId);
+  }, manager.doc.clientID);
+}
+
+// Diagram Actions (Mermaid Sequence, Flowchart, etc.)
+export const DEFAULT_MERMAID_SEQUENCE = `sequenceDiagram
+    autonumber
+    actor User as 사용자
+    participant UI as 앱 화면 (Riverpod)
+    participant Auth as SupabaseAuth
+    participant Sync as SupabaseSyncService
+    participant Hive as Local Hive DB
+    participant Cloud as Supabase Cloud DB
+
+    User->>Auth: 소셜 로그인 완료 (카카오/구글)
+    Note over UI: 🔄 "데이터 동기화 중..." 로딩 오버레이 표시
+    Auth->>Sync: syncOnAuthChange(userId) 트리거
+    
+    alt 기존 회원 (Cloud 데이터 존재)
+        Sync->>Hive: _clearLocalBoxesForCleanPull() (tags 박스 포함 모두 클리어)
+        Sync->>Cloud: pullSupabaseToLocalHive() (태그, 루틴, 설정 등 다운로드)
+        Cloud-->>Hive: 사용자 고유 데이터만 로컬 Hive에 저장
+    else 신규 회원 (첫 가입)
+        Sync->>Cloud: migrateLocalHiveToSupabase() (게스트 데이터 업로드)
+        Sync->>Hive: _clearLocalBoxesForCleanPull()
+        Sync->>Cloud: pullSupabaseToLocalHive() (UUID 기반 정규 데이터로 재구축)
+    end
+
+    Sync-->>UI: ref.invalidate() 프로바이더 갱신
+    Note over UI: ✅ 로딩 해제 및 내 클라우드 데이터만 깔끔하게 표시`;
+
+export const DEFAULT_MERMAID_FLOWCHART = `flowchart TD
+    Start([시작]) --> Auth{로그인 여부 확인}
+    Auth -- 로그인됨 --> CloudSync[Supabase 클라우드 동기화]
+    Auth -- 비로그인 --> LocalStorage[로컬 Hive DB 저장]
+    CloudSync --> Cache[로컬 캐시 갱신]
+    LocalStorage --> Main[메인 대시보드]
+    Cache --> Main
+    Main --> End([완료])`;
+
+export function addDiagramAction(
+  manager: ERDDocManager,
+  title: string = '시스템 시퀀스 다이어그램',
+  code: string = DEFAULT_MERMAID_SEQUENCE,
+  x: number = 250,
+  y: number = 200,
+  type: string = 'sequence',
+  pageId?: string
+): string {
+  const diagramId = `diag_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const diagram: DiagramModel = {
+    id: diagramId,
+    title,
+    type: type as any,
+    code,
+    theme: 'dark',
+    position: { x, y, width: 480, height: 380 },
+    pageId,
+  };
+
+  manager.doc.transact(() => {
+    manager.diagramsMap.set(diagramId, diagram);
+  }, manager.doc.clientID);
+
+  return diagramId;
+}
+
+export function updateDiagramAction(
+  manager: ERDDocManager,
+  diagramId: string,
+  updates: Partial<DiagramModel>
+) {
+  const current = manager.diagramsMap.get(diagramId);
+  if (!current) return;
+
+  const updated: DiagramModel = {
+    ...current,
+    ...updates,
+    position: updates.position
+      ? { ...current.position, ...updates.position }
+      : current.position,
+  };
+
+  manager.doc.transact(() => {
+    manager.diagramsMap.set(diagramId, updated);
+  }, manager.doc.clientID);
+}
+
+export function deleteDiagramAction(manager: ERDDocManager, diagramId: string) {
+  manager.doc.transact(() => {
+    manager.diagramsMap.delete(diagramId);
+  }, manager.doc.clientID);
+}
+
+export function duplicateDiagramAction(
+  manager: ERDDocManager,
+  diagramId: string
+): string | null {
+  const original = manager.diagramsMap.get(diagramId);
+  if (!original) return null;
+
+  const newDiagramId = `diag_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const duplicated: DiagramModel = {
+    ...original,
+    id: newDiagramId,
+    title: `${original.title} (복사본)`,
+    position: {
+      ...original.position,
+      x: (original.position?.x ?? 200) + 40,
+      y: (original.position?.y ?? 200) + 40,
+    },
+  };
+
+  manager.doc.transact(() => {
+    manager.diagramsMap.set(newDiagramId, duplicated);
+  }, manager.doc.clientID);
+
+  return newDiagramId;
+}
+
+// Page Actions (Figma Style Multi-Page/Tabs)
+export function addPageAction(
+  manager: ERDDocManager,
+  name: string = '새 페이지',
+  icon?: string
+): string {
+  const pageId = `page_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const count = manager.pagesMap.size;
+  const page: PageModel = {
+    id: pageId,
+    name,
+    order: count,
+    icon,
+  };
+
+  manager.doc.transact(() => {
+    manager.pagesMap.set(pageId, page);
+  }, manager.doc.clientID);
+
+  return pageId;
+}
+
+export function updatePageAction(
+  manager: ERDDocManager,
+  pageId: string,
+  updates: Partial<PageModel>
+) {
+  const current = manager.pagesMap.get(pageId);
+  if (!current) return;
+
+  const updated: PageModel = { ...current, ...updates };
+  manager.doc.transact(() => {
+    manager.pagesMap.set(pageId, updated);
+  }, manager.doc.clientID);
+}
+
+export function deletePageAction(manager: ERDDocManager, pageId: string) {
+  manager.doc.transact(() => {
+    // 1. 해당 페이지에 속한 테이블 & 노드 삭제
+    const tablesToDelete: string[] = [];
+    manager.tablesMap.forEach((table, tId) => {
+      if (table.pageId === pageId) {
+        tablesToDelete.push(tId);
+      }
+    });
+    tablesToDelete.forEach((tId) => {
+      manager.tablesMap.delete(tId);
+      manager.nodesMap.delete(tId);
+    });
+
+    // 2. 해당 페이지에 속한 메모 삭제
+    const memosToDelete: string[] = [];
+    manager.memosMap.forEach((memo, mId) => {
+      if (memo.pageId === pageId) {
+        memosToDelete.push(mId);
+      }
+    });
+    memosToDelete.forEach((mId) => manager.memosMap.delete(mId));
+
+    // 3. 해당 페이지에 속한 다이어그램 삭제
+    const diagsToDelete: string[] = [];
+    manager.diagramsMap.forEach((diag, dId) => {
+      if (diag.pageId === pageId) {
+        diagsToDelete.push(dId);
+      }
+    });
+    diagsToDelete.forEach((dId) => manager.diagramsMap.delete(dId));
+
+    // 4. 고아 릴레이션십 정리
+    const relsToDelete: string[] = [];
+    manager.relationshipsMap.forEach((rel, rId) => {
+      if (!manager.tablesMap.has(rel.parentTableId) || !manager.tablesMap.has(rel.childTableId)) {
+        relsToDelete.push(rId);
+      }
+    });
+    relsToDelete.forEach((rId) => manager.relationshipsMap.delete(rId));
+
+    // 5. 페이지 자체 삭제
+    manager.pagesMap.delete(pageId);
+
+    // 만약 모든 페이지가 삭제되어 0개가 되었다면 기본 메인 ERD 페이지 1개 자동 복구
+    if (manager.pagesMap.size === 0) {
+      const defId = `page_${Date.now()}`;
+      manager.pagesMap.set(defId, {
+        id: defId,
+        name: '메인 ERD',
+        order: 0,
+      });
+    }
+  }, manager.doc.clientID);
+}
+
+export function reorderPagesAction(manager: ERDDocManager, orderedPageIds: string[]) {
+  manager.doc.transact(() => {
+    orderedPageIds.forEach((pId, idx) => {
+      const page = manager.pagesMap.get(pId);
+      if (page && page.order !== idx) {
+        manager.pagesMap.set(pId, { ...page, order: idx });
+      }
+    });
   }, manager.doc.clientID);
 }
 

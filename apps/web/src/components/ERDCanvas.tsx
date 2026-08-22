@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -25,10 +25,13 @@ import {
   ActiveTool,
   MemoModel,
   DomainItem,
+  DiagramModel,
+  PageModel,
 } from '@/types/erd';
 import { ERDDocManager } from '@/collaboration/doc';
 import { TableNode } from './TableNode';
 import { MemoNode } from './MemoNode';
+import { MermaidNode } from './MermaidNode';
 import { RelationshipEdge } from './RelationshipEdge';
 import {
   updateNodePositionAction,
@@ -48,6 +51,11 @@ import {
   updateMemoAction,
   deleteMemoAction,
   addMemoAction,
+  addDiagramAction,
+  updateDiagramAction,
+  deleteDiagramAction,
+  duplicateDiagramAction,
+  DEFAULT_MERMAID_SEQUENCE,
 } from '@/collaboration/actions';
 import { RelationshipModal } from './RelationshipModal';
 import { CreateRelationshipModal } from './CreateRelationshipModal';
@@ -61,6 +69,10 @@ interface ERDCanvasProps {
   relationships: Record<string, RelationshipModel>;
   nodes: Record<string, NodeView>;
   memos: Record<string, MemoModel>;
+  diagrams?: Record<string, DiagramModel>;
+  pages?: Record<string, PageModel>;
+  activePageId?: string;
+  defaultPageId?: string;
   domains?: DomainItem[];
   displayMode: DisplayMode;
   activeTool: ActiveTool;
@@ -70,11 +82,13 @@ interface ERDCanvasProps {
   isViewerMode?: boolean;
   reactFlowInstanceRef?: React.MutableRefObject<any>;
   canvasSettings: CanvasSettings;
+  onOpenDiagramEditor?: (diagram: DiagramModel) => void;
 }
 
 const nodeTypes = {
   tableNode: TableNode,
   memoNode: MemoNode,
+  mermaidNode: MermaidNode,
 };
 
 const edgeTypes = {
@@ -87,6 +101,10 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   relationships,
   nodes,
   memos,
+  diagrams = {},
+  pages = {},
+  activePageId,
+  defaultPageId,
   domains = [],
   displayMode,
   activeTool,
@@ -95,6 +113,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   isViewerMode = false,
   reactFlowInstanceRef,
   canvasSettings,
+  onOpenDiagramEditor,
 }) => {
   // Pending source table for Relationship creation (Click Parent -> Click Child)
   const [selectedParentTableId, setSelectedParentTableId] = useState<string | null>(null);
@@ -118,96 +137,137 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   // Real-time Spacebar Pan Cursor Detection
   const [isSpaceDown, setIsSpaceDown] = useState(false);
 
-  // Convert Yjs tables & memos to React Flow Nodes
+  // Convert Yjs tables, memos & diagrams to React Flow Nodes
   const computedNodes: Node[] = useMemo(() => {
-    const tableNodes: Node[] = Object.values(tables).map((table) => {
-      const nodeView = nodes[table.id] || {
-        id: `node_${table.id}`,
-        tableId: table.id,
-        position: { x: 100, y: 100 },
-      };
+    const sortedPages = Object.values(pages || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const firstPageId = sortedPages[0]?.id;
 
-      const isSourceCandidate = selectedParentTableId === table.id;
-      const isTargetCandidate = !!selectedParentTableId && selectedParentTableId !== table.id;
+    const isItemOnActivePage = (itemPageId?: string) => {
+      if (!activePageId) return true;
+      if (itemPageId) return itemPageId === activePageId;
+      // If item has no pageId (legacy existing data), it automatically belongs to the default/1st page
+      return (
+        activePageId === 'page_default' ||
+        activePageId === defaultPageId ||
+        activePageId === firstPageId ||
+        !pages ||
+        Object.keys(pages).length === 0
+      );
+    };
 
-      return {
-        id: table.id,
-        type: 'tableNode',
-        position: nodeView.position,
-        data: {
-          table,
-          displayMode,
-          domains,
-          zoomLabelScale: canvasSettings.zoomLabelScale ?? 1.45,
-          isSourceCandidate,
-          isTargetCandidate,
-          isViewerMode,
-          onOpenManualFk: (t: TableModel, c: any) => setManualFkTarget({ table: t, column: c }),
-          onUpdateTable: (tId: string, updates: Partial<TableModel>) =>
-            !isViewerMode && updateTableAction(manager, tId, updates),
-          onDuplicateTable: (tId: string) => !isViewerMode && duplicateTableAction(manager, tId),
-          onDeleteTable: (tId: string) => !isViewerMode && deleteTableAction(manager, tId),
-          onAddColumn: (tId: string, colData?: any, insertIndex?: number) =>
-            !isViewerMode && addColumnAction(manager, tId, colData, insertIndex),
-          onUpdateColumn: (tId: string, cId: string, updates: any) =>
-            !isViewerMode && updateColumnAction(manager, tId, cId, updates),
-          onDeleteColumn: (tId: string, cId: string) =>
-            !isViewerMode && deleteColumnAction(manager, tId, cId),
-          onReorderColumns: (tId: string, newOrder: string[]) =>
-            !isViewerMode && reorderColumnsAction(manager, tId, newOrder),
-          onMoveColumn: (tId: string, cId: string, direction: 'up' | 'down') =>
-            !isViewerMode && moveColumnAction(manager, tId, cId, direction),
-          onTableClick: (tId: string) => {
-            if (isViewerMode) return;
-            if (activeTool.startsWith('rel-')) {
-              if (!selectedParentTableId) {
-                setSelectedParentTableId(tId);
-              } else if (selectedParentTableId !== tId) {
-                const targetMult: any = activeTool.replace('rel-', '');
-                setPendingCreation({
-                  parentId: selectedParentTableId,
-                  childId: tId,
-                  multiplicity: targetMult,
-                });
-                setSelectedParentTableId(null);
-                setActiveTool('select');
+    const tableNodes: Node[] = Object.values(tables)
+      .filter((table) => isItemOnActivePage(table.pageId))
+      .map((table) => {
+        const nodeView = nodes[table.id] || {
+          id: `node_${table.id}`,
+          tableId: table.id,
+          position: { x: 100, y: 100 },
+        };
+
+        const isSourceCandidate = selectedParentTableId === table.id;
+        const isTargetCandidate = !!selectedParentTableId && selectedParentTableId !== table.id;
+
+        return {
+          id: table.id,
+          type: 'tableNode',
+          position: nodeView.position,
+          data: {
+            table,
+            displayMode,
+            domains,
+            zoomLabelScale: canvasSettings.zoomLabelScale ?? 1.45,
+            isSourceCandidate,
+            isTargetCandidate,
+            isViewerMode,
+            onOpenManualFk: (t: TableModel, c: any) => setManualFkTarget({ table: t, column: c }),
+            onUpdateTable: (tId: string, updates: Partial<TableModel>) =>
+              !isViewerMode && updateTableAction(manager, tId, updates),
+            onDuplicateTable: (tId: string) => !isViewerMode && duplicateTableAction(manager, tId),
+            onDeleteTable: (tId: string) => !isViewerMode && deleteTableAction(manager, tId),
+            onAddColumn: (tId: string, colData?: any, insertIndex?: number) =>
+              !isViewerMode && addColumnAction(manager, tId, colData, insertIndex),
+            onUpdateColumn: (tId: string, cId: string, updates: any) =>
+              !isViewerMode && updateColumnAction(manager, tId, cId, updates),
+            onDeleteColumn: (tId: string, cId: string) =>
+              !isViewerMode && deleteColumnAction(manager, tId, cId),
+            onReorderColumns: (tId: string, newOrder: string[]) =>
+              !isViewerMode && reorderColumnsAction(manager, tId, newOrder),
+            onMoveColumn: (tId: string, cId: string, direction: 'up' | 'down') =>
+              !isViewerMode && moveColumnAction(manager, tId, cId, direction),
+            onTableClick: (tId: string) => {
+              if (isViewerMode) return;
+              if (activeTool.startsWith('rel-')) {
+                if (!selectedParentTableId) {
+                  setSelectedParentTableId(tId);
+                } else if (selectedParentTableId !== tId) {
+                  const targetMult: any = activeTool.replace('rel-', '');
+                  setPendingCreation({
+                    parentId: selectedParentTableId,
+                    childId: tId,
+                    multiplicity: targetMult,
+                  });
+                  setSelectedParentTableId(null);
+                  setActiveTool('select');
+                }
+              } else {
+                // Select table node immediately regardless of where inside the table was clicked
+                setRfNodes((prevNodes) =>
+                  prevNodes.map((n) => {
+                    const isTarget = n.id === tId;
+                    return {
+                      ...n,
+                      selected: isTarget,
+                      draggable: !isSpaceDown && isTarget,
+                    };
+                  })
+                );
               }
-            } else {
-              // Select table node immediately regardless of where inside the table was clicked
-              setRfNodes((prevNodes) =>
-                prevNodes.map((n) => {
-                  const isTarget = n.id === tId;
-                  return {
-                    ...n,
-                    selected: isTarget,
-                    draggable: !isSpaceDown && isTarget,
-                  };
-                })
-              );
-            }
+            },
           },
+        };
+      });
+
+    const memoNodes: Node[] = Object.values(memos)
+      .filter((memo) => isItemOnActivePage(memo.pageId))
+      .map((memo) => ({
+        id: memo.id,
+        type: 'memoNode',
+        position: memo.position,
+        data: {
+          memo,
+          isViewerMode,
+          onUpdate: (mId: string, updates: Partial<MemoModel>) =>
+            !isViewerMode && updateMemoAction(manager, mId, updates),
+          onDelete: (mId: string) => !isViewerMode && deleteMemoAction(manager, mId),
         },
-      };
-    });
+      }));
 
-    const memoNodes: Node[] = Object.values(memos).map((memo) => ({
-      id: memo.id,
-      type: 'memoNode',
-      position: memo.position,
-      data: {
-        memo,
-        isViewerMode,
-        onUpdate: (mId: string, updates: Partial<MemoModel>) =>
-          !isViewerMode && updateMemoAction(manager, mId, updates),
-        onDelete: (mId: string) => !isViewerMode && deleteMemoAction(manager, mId),
-      },
-    }));
+    const diagramNodes: Node[] = Object.values(diagrams || {})
+      .filter((diag) => isItemOnActivePage(diag.pageId))
+      .map((diag) => ({
+        id: diag.id,
+        type: 'mermaidNode',
+        position: diag.position,
+        data: {
+          diagram: diag,
+          isViewerMode,
+          onUpdate: (dId: string, updates: Partial<DiagramModel>) =>
+            !isViewerMode && updateDiagramAction(manager, dId, updates),
+          onDelete: (dId: string) => !isViewerMode && deleteDiagramAction(manager, dId),
+          onDuplicate: (dId: string) => !isViewerMode && duplicateDiagramAction(manager, dId),
+          onOpenEditor: (d: DiagramModel) => onOpenDiagramEditor?.(d),
+        },
+      }));
 
-    return [...tableNodes, ...memoNodes];
+    return [...tableNodes, ...memoNodes, ...diagramNodes];
   }, [
     tables,
     nodes,
     memos,
+    diagrams,
+    pages,
+    activePageId,
+    defaultPageId,
     displayMode,
     selectedParentTableId,
     activeTool,
@@ -216,11 +276,35 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     isViewerMode,
     canvasSettings.zoomLabelScale,
     domains,
+    onOpenDiagramEditor,
   ]);
 
-  // Convert Yjs relationships to React Flow Edges
+  // Convert Yjs relationships to React Flow Edges (only visible tables on current page)
   const computedEdges: Edge[] = useMemo(() => {
-    const relList = Object.values(relationships);
+    const sortedPages = Object.values(pages || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const firstPageId = sortedPages[0]?.id;
+
+    const isItemOnActivePage = (itemPageId?: string) => {
+      if (!activePageId) return true;
+      if (itemPageId) return itemPageId === activePageId;
+      return (
+        activePageId === 'page_default' ||
+        activePageId === defaultPageId ||
+        activePageId === firstPageId ||
+        !pages ||
+        Object.keys(pages).length === 0
+      );
+    };
+
+    const visibleTableIds = new Set(
+      Object.values(tables)
+        .filter((t) => isItemOnActivePage(t.pageId))
+        .map((t) => t.id)
+    );
+
+    const relList = Object.values(relationships).filter(
+      (rel) => visibleTableIds.has(rel.parentTableId) && visibleTableIds.has(rel.childTableId)
+    );
 
     const edgeCalculations = relList.map((rel) => {
       const parentNode = nodes[rel.parentTableId];
@@ -348,7 +432,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         },
       };
     });
-  }, [relationships, nodes, manager]);
+  }, [relationships, nodes, tables, activePageId, defaultPageId, pages, manager]);
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(computedNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(computedEdges);
@@ -397,7 +481,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     [setRfNodes, isViewerMode, isSpaceDown]
   );
 
-  // Deselect all nodes or create Memo stamp on pane click
+  // Deselect all nodes or create Memo/Diagram stamp on pane click
   const onPaneClick = useCallback(
     (event: React.MouseEvent) => {
       if (activeTool === 'memo' && !isViewerMode && reactFlowInstanceRef?.current) {
@@ -405,7 +489,25 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           x: event.clientX,
           y: event.clientY,
         });
-        addMemoAction(manager, '새 메모', Math.round(flowPos.x - 125), Math.round(flowPos.y - 60));
+        addMemoAction(manager, '새 메모', Math.round(flowPos.x - 125), Math.round(flowPos.y - 60), '#fef08a', activePageId);
+        setActiveTool('select');
+        return;
+      }
+
+      if (activeTool === 'diagram' && !isViewerMode && reactFlowInstanceRef?.current) {
+        const flowPos = reactFlowInstanceRef.current.screenToFlowPosition({
+          x: event.clientX,
+          y: event.clientY,
+        });
+        addDiagramAction(
+          manager,
+          '시스템 시퀀스 다이어그램',
+          DEFAULT_MERMAID_SEQUENCE,
+          Math.round(flowPos.x - 240),
+          Math.round(flowPos.y - 190),
+          'sequence',
+          activePageId
+        );
         setActiveTool('select');
         return;
       }
@@ -418,7 +520,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         }))
       );
     },
-    [activeTool, isViewerMode, manager, reactFlowInstanceRef, setActiveTool, setRfNodes]
+    [activeTool, isViewerMode, manager, reactFlowInstanceRef, setActiveTool, setRfNodes, activePageId]
   );
 
   const onNodeDragStop = useCallback(
@@ -435,6 +537,16 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
                 y: n.position.y,
                 width: currentMemo?.position.width,
                 height: currentMemo?.position.height,
+              },
+            });
+          } else if (n.type === 'mermaidNode') {
+            const currentDiag = manager.diagramsMap.get(n.id);
+            updateDiagramAction(manager, n.id, {
+              position: {
+                x: n.position.x,
+                y: n.position.y,
+                width: currentDiag?.position.width,
+                height: currentDiag?.position.height,
               },
             });
           } else {
@@ -487,9 +599,15 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   const parentTable = editingRelationship ? tables[editingRelationship.parentTableId] : null;
   const childTable = editingRelationship ? tables[editingRelationship.childTableId] : null;
 
+  const lastPointerSentRef = useRef<number>(0);
   const handlePointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (!manager?.provider?.awareness || !reactFlowInstanceRef?.current) return;
+      const now = Date.now();
+      // Throttle cursor broadcast to max ~25fps (40ms) to prevent high CPU / WebSocket message flood
+      if (now - lastPointerSentRef.current < 40) return;
+      lastPointerSentRef.current = now;
+
       const flowPos = reactFlowInstanceRef.current.screenToFlowPosition({
         x: e.clientX,
         y: e.clientY,
@@ -615,6 +733,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         colorMode={isLightBg ? 'light' : 'dark'}
         minZoom={0.1}
         maxZoom={2.5}
+        onlyRenderVisibleElements={true}
         selectionOnDrag={!isRelToolActive && !isSpaceDown && !isViewerMode}
         selectionMode={SelectionMode.Partial}
         panOnDrag={isViewerMode || isSpaceDown || isRelToolActive ? [0, 1, 2] : [1, 2]}

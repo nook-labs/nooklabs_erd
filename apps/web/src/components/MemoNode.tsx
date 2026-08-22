@@ -16,6 +16,7 @@ import {
 
 export interface MemoNodeData {
   memo: MemoModel;
+  isViewerMode?: boolean;
   onUpdate: (memoId: string, updates: Partial<MemoModel>) => void;
   onDelete: (memoId: string) => void;
 }
@@ -53,7 +54,7 @@ function resolveFontSizePx(val: any): number {
   return 18; // 기본 18px (선명하고 편안한 본문 크기)
 }
 
-export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
+const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
   const { memo, onUpdate, onDelete } = data as unknown as MemoNodeData;
   const [content, setContent] = useState(memo?.content || '');
   const isFocusedRef = useRef(false);
@@ -397,5 +398,14 @@ export const MemoNode: React.FC<NodeProps> = ({ data, selected }) => {
     </div>
   );
 };
+
+const areMemoPropsEqual = (prevProps: NodeProps, nextProps: NodeProps): boolean => {
+  if (prevProps.selected !== nextProps.selected) return false;
+  const pData = prevProps.data as unknown as MemoNodeData;
+  const nData = nextProps.data as unknown as MemoNodeData;
+  return pData.memo === nData.memo && pData.isViewerMode === nData.isViewerMode;
+};
+
+export const MemoNode = React.memo(MemoNodeComponent, areMemoPropsEqual);
 
 

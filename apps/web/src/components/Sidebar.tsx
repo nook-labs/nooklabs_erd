@@ -6,6 +6,7 @@ import {
   MousePointer2,
   Table2,
   FileText,
+  Workflow,
   Grid3X3,
   ZoomIn,
   ZoomOut,
@@ -24,6 +25,7 @@ interface SidebarProps {
   setIsIdentifyingMode: (identifying: boolean) => void;
   onAddTable: () => void;
   onAddMemo: () => void;
+  onAddDiagram?: () => void;
   onAutoLayout: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
@@ -123,6 +125,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsIdentifyingMode,
   onAddTable,
   onAddMemo,
+  onAddDiagram,
   onAutoLayout,
   onZoomIn,
   onZoomOut,
@@ -213,6 +216,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping" />
         )}
       </button>
+
+      {/* 3.5. Add Diagram (Mermaid Flowchart / Sequence) */}
+      {onAddDiagram && (
+        <button
+          onClick={onAddDiagram}
+          className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+          title="Mermaid 다이어그램 추가 (시퀀스/플로우차트 / 단축키: Shift + D)"
+        >
+          <Workflow className="w-3 h-3 text-indigo-400" />
+        </button>
+      )}
 
       {/* Divider */}
       <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />

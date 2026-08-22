@@ -9,10 +9,13 @@ import { Project, ProjectRole } from '@/lib/supabase/types';
 import { createERDDoc, ERDDocManager } from '@/collaboration/doc';
 import {
   TableModel,
+  ColumnModel,
   RelationshipModel,
   NodeView,
   MemoModel,
   DomainItem,
+  DiagramModel,
+  PageModel,
   DisplayMode,
   ActiveTool,
   ProjectVersion,
@@ -30,10 +33,20 @@ import { CanvasInspector, CanvasSettings } from '@/components/CanvasInspector';
 import { EntityListPanel } from '@/components/EntityListPanel';
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel';
 import { GlobalSearchModal } from '@/components/GlobalSearchModal';
+import { MermaidEditorModal } from '@/components/MermaidEditorModal';
+import { CanvasPagesTabBar } from '@/components/CanvasPagesTabBar';
 import {
   addTableAction,
   deleteTableAction,
   addMemoAction,
+  addDiagramAction,
+  updateDiagramAction,
+  deleteDiagramAction,
+  duplicateDiagramAction,
+  addPageAction,
+  updatePageAction,
+  deletePageAction,
+  reorderPagesAction,
   addRelationshipAction,
   updateProjectTitleAction,
   updateNodePositionAction,
@@ -41,6 +54,7 @@ import {
   updateDomainAction,
   deleteDomainAction,
   syncDomainColumnsAction,
+  DEFAULT_MERMAID_SEQUENCE,
 } from '@/collaboration/actions';
 import {
   captureCurrentSnapshot,
@@ -71,18 +85,25 @@ export default function ProjectEditorPage() {
   const [relationships, setRelationships] = useState<Record<string, RelationshipModel>>({});
   const [nodes, setNodes] = useState<Record<string, NodeView>>({});
   const [memos, setMemos] = useState<Record<string, MemoModel>>({});
+  const [diagrams, setDiagrams] = useState<Record<string, DiagramModel>>({});
+  const [pages, setPages] = useState<Record<string, PageModel>>({});
+  const [activePageId, setActivePageId] = useState<string>('page_default');
+  const [editingDiagram, setEditingDiagram] = useState<DiagramModel | null>(null);
+  const [isDiagramModalOpen, setIsDiagramModalOpen] = useState(false);
   const [domains, setDomains] = useState<DomainItem[]>([]);
   const [projectTitle, setProjectTitle] = useState('프로젝트 ERD');
   const [onlineUsers, setOnlineUsers] = useState<OnlineUserInfo[]>([]);
   const [registeredMemberCount, setRegisteredMemberCount] = useState<number>(1);
-  const [displayMode, setDisplayModeState] = useState<DisplayMode>('physical');
+  const [displayMode, setDisplayModeState] = useState<DisplayMode>('both');
 
-  // Load saved DisplayMode from localStorage on mount
+  // Load saved DisplayMode from localStorage on mount (Default: 'both' - 동시 표기)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('nooklabs_display_mode') as DisplayMode;
       if (saved && (saved === 'physical' || saved === 'logical' || saved === 'both')) {
         setDisplayModeState(saved);
+      } else {
+        setDisplayModeState('both');
       }
     }
   }, []);
@@ -381,6 +402,29 @@ export default function ProjectEditorPage() {
         });
         setMemos(mObj);
 
+        const diagObj: Record<string, DiagramModel> = {};
+        docMgr.diagramsMap.forEach((val, key) => {
+          diagObj[key] = val;
+        });
+        setDiagrams(diagObj);
+
+        const pageObj: Record<string, PageModel> = {};
+        docMgr.pagesMap.forEach((val, key) => {
+          pageObj[key] = val;
+        });
+        setPages(pageObj);
+
+        // Auto-select valid page if current active page does not exist in pagesMap
+        const pageList = Object.values(pageObj).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        if (pageList.length > 0) {
+          setActivePageId((current) => {
+            if (!current || (current !== 'page_default' && !pageObj[current])) {
+              return pageList[0]?.id || 'page_default';
+            }
+            return current;
+          });
+        }
+
         const dArr: DomainItem[] = [];
         docMgr.domainsMap.forEach((val) => {
           dArr.push(val);
@@ -538,9 +582,9 @@ export default function ProjectEditorPage() {
         }
       }
 
-      addTableAction(manager, '새 테이블', 'new_table', posX, posY);
+      addTableAction(manager, '새 테이블', 'new_table', posX, posY, '#4f46e5', activePageId);
     },
-    [manager, isReadOnly]
+    [manager, isReadOnly, activePageId]
   );
 
   const handleDeleteTable = useCallback(
@@ -568,12 +612,203 @@ export default function ProjectEditorPage() {
         }
       }
 
-      addMemoAction(manager, '새 메모', posX, posY);
+      addMemoAction(manager, '새 메모', posX, posY, '#fef08a', activePageId);
+    },
+    [manager, isReadOnly, activePageId]
+  );
+
+  const handleAddDiagram = useCallback(
+    (x?: number, y?: number) => {
+      if (!manager || isReadOnly) return;
+      let posX = x;
+      let posY = y;
+
+      if (posX === undefined || posY === undefined) {
+        if (mouseClientPosRef.current && reactFlowInstanceRef.current?.screenToFlowPosition) {
+          const flowPos = reactFlowInstanceRef.current.screenToFlowPosition(mouseClientPosRef.current);
+          posX = Math.round(flowPos.x - 240);
+          posY = Math.round(flowPos.y - 190);
+        } else {
+          posX = 200 + Math.random() * 100;
+          posY = 200 + Math.random() * 100;
+        }
+      }
+
+      addDiagramAction(
+        manager,
+        '시스템 시퀀스 다이어그램',
+        DEFAULT_MERMAID_SEQUENCE,
+        posX,
+        posY,
+        'sequence',
+        activePageId
+      );
+    },
+    [manager, isReadOnly, activePageId]
+  );
+
+  const handleOpenDiagramEditor = useCallback((diagram: DiagramModel) => {
+    setEditingDiagram(diagram);
+    setIsDiagramModalOpen(true);
+  }, []);
+
+  const handleSaveDiagram = useCallback(
+    (updates: Partial<DiagramModel>) => {
+      if (!manager || !editingDiagram) return;
+      updateDiagramAction(manager, editingDiagram.id, updates);
+    },
+    [manager, editingDiagram]
+  );
+
+  // Multi-Page Management Handlers
+  const handleAddPage = useCallback(
+    (name?: string) => {
+      if (!manager || isReadOnly) return;
+      if (manager.pagesMap.size === 0) {
+        let newPageId = '';
+        manager.doc.transact(() => {
+          const defaultPageId = `page_default_${Date.now()}`;
+          manager.pagesMap.set(defaultPageId, {
+            id: defaultPageId,
+            name: '메인 ERD',
+            order: 0,
+          });
+          newPageId = `page_${Date.now() + 1}_${Math.random().toString(36).substring(2, 7)}`;
+          manager.pagesMap.set(newPageId, {
+            id: newPageId,
+            name: name || '페이지 2',
+            order: 1,
+          });
+        }, manager.doc.clientID);
+        if (newPageId) {
+          setActivePageId(newPageId);
+        }
+        return;
+      }
+      const count = Object.keys(pages).length;
+      const newPageId = addPageAction(manager, name || `페이지 ${count + 1}`);
+      setActivePageId(newPageId);
+    },
+    [manager, isReadOnly, pages]
+  );
+
+  const handleUpdatePage = useCallback(
+    (pageId: string, updates: Partial<PageModel>) => {
+      if (!manager || isReadOnly) return;
+      updatePageAction(manager, pageId, updates);
     },
     [manager, isReadOnly]
   );
 
-  // Global Keyboard Shortcuts (Shift + T, Shift + M, V, ESC)
+  const handleDeletePage = useCallback(
+    (pageId: string) => {
+      if (!manager || isReadOnly) return;
+      deletePageAction(manager, pageId);
+
+      // Select next remaining page
+      const remaining: PageModel[] = [];
+      manager.pagesMap.forEach((p) => {
+        if (p.id !== pageId) remaining.push(p);
+      });
+      remaining.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+      if (remaining.length > 0) {
+        setActivePageId(remaining[0].id);
+      } else {
+        const sorted = Object.values(pages).filter((p) => p.id !== pageId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        setActivePageId(sorted[0]?.id || 'page_default');
+      }
+    },
+    [manager, isReadOnly, pages]
+  );
+
+  const handleDuplicatePage = useCallback(
+    (sourcePageId: string) => {
+      if (!manager || isReadOnly) return;
+      const sourcePage = pages[sourcePageId];
+      const newPageName = sourcePage ? `${sourcePage.name} (복사본)` : '페이지 복사본';
+      const newPageId = addPageAction(manager, newPageName);
+
+      const sortedPages = Object.values(pages).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const isFirstPage = sortedPages.length === 0 || sourcePageId === 'page_default' || sourcePageId === sortedPages[0]?.id;
+
+      const isItemOnSourcePage = (itemPageId?: string) => {
+        if (itemPageId) return itemPageId === sourcePageId;
+        return isFirstPage;
+      };
+
+      // Duplicate tables, relationships, memos, and diagrams associated with the page
+      manager.doc.transact(() => {
+        const tableIdMap: Record<string, string> = {};
+
+        // 1. Copy tables & nodes
+        Object.values(tables).forEach((table) => {
+          if (isItemOnSourcePage(table.pageId)) {
+            const newTblId = `tbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            tableIdMap[table.id] = newTblId;
+            const oldNode = nodes[table.id] || {
+              id: `node_${table.id}`,
+              tableId: table.id,
+              position: { x: 100, y: 100 },
+            };
+            manager.tablesMap.set(newTblId, { ...table, id: newTblId, pageId: newPageId });
+            manager.nodesMap.set(newTblId, {
+              ...oldNode,
+              id: `node_${newTblId}`,
+              tableId: newTblId,
+              position: { ...oldNode.position },
+            });
+          }
+        });
+
+        // 2. Copy relationships between duplicated tables
+        Object.values(relationships).forEach((rel) => {
+          const newParentId = tableIdMap[rel.parentTableId];
+          const newChildId = tableIdMap[rel.childTableId];
+          if (newParentId && newChildId) {
+            const newRelId = `rel_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            manager.relationshipsMap.set(newRelId, {
+              ...rel,
+              id: newRelId,
+              parentTableId: newParentId,
+              childTableId: newChildId,
+            });
+          }
+        });
+
+        // 3. Copy memos
+        Object.values(memos).forEach((memo) => {
+          if (isItemOnSourcePage(memo.pageId)) {
+            const newMemoId = `memo_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            manager.memosMap.set(newMemoId, {
+              ...memo,
+              id: newMemoId,
+              pageId: newPageId,
+              position: { ...memo.position },
+            });
+          }
+        });
+
+        // 4. Copy diagrams
+        Object.values(diagrams).forEach((diag) => {
+          if (isItemOnSourcePage(diag.pageId)) {
+            const newDiagId = `diag_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+            manager.diagramsMap.set(newDiagId, {
+              ...diag,
+              id: newDiagId,
+              pageId: newPageId,
+              position: { ...diag.position },
+            });
+          }
+        });
+      }, manager.doc.clientID);
+
+      setActivePageId(newPageId);
+    },
+    [manager, isReadOnly, pages, tables, memos, diagrams, nodes, relationships]
+  );
+
+  // Global Keyboard Shortcuts (Shift + T, Shift + M, Shift + D, V, ESC)
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // ESC cancels active tool
@@ -621,6 +856,13 @@ export default function ProjectEditorPage() {
           handleAddMemo();
           return;
         }
+
+        // Shift + D (다이어그램 추가: 대소문자, 한영, 물리키 KeyD 모두 지원)
+        if (key === 'd' || key === 'ㅇ' || code === 'KeyD') {
+          e.preventDefault();
+          handleAddDiagram();
+          return;
+        }
       }
 
       // V (뷰어 모드 토글: 대소문자, 한영, 물리키 KeyV 지원)
@@ -642,7 +884,7 @@ export default function ProjectEditorPage() {
     return () => {
       window.removeEventListener('keydown', handleGlobalKeyDown);
     };
-  }, [handleAddTable, handleAddMemo, isReadOnly, setActiveTool, setIsViewerMode, setIsGlobalSearchOpen]);
+  }, [handleAddTable, handleAddMemo, handleAddDiagram, isReadOnly, setActiveTool, setIsViewerMode, setIsGlobalSearchOpen]);
 
   const handleUpdateTitle = useCallback(
     (newTitle: string) => {
@@ -772,6 +1014,7 @@ export default function ProjectEditorPage() {
           setIsIdentifyingMode={setIsIdentifyingMode}
           onAddTable={() => handleAddTable()}
           onAddMemo={() => handleAddMemo()}
+          onAddDiagram={() => handleAddDiagram()}
           onAutoLayout={handleAutoLayout}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
@@ -797,6 +1040,9 @@ export default function ProjectEditorPage() {
               relationships={relationships}
               nodes={nodes}
               memos={memos}
+              diagrams={diagrams}
+              pages={pages}
+              activePageId={activePageId}
               domains={domains}
               displayMode={displayMode}
               activeTool={activeTool}
@@ -806,6 +1052,7 @@ export default function ProjectEditorPage() {
               isViewerMode={isReadOnly || isViewerMode}
               reactFlowInstanceRef={reactFlowInstanceRef}
               canvasSettings={canvasSettings}
+              onOpenDiagramEditor={handleOpenDiagramEditor}
             />
           )}
 
@@ -832,6 +1079,20 @@ export default function ProjectEditorPage() {
             currentTableCount={Object.keys(tables).length}
             currentRelationshipCount={Object.keys(relationships).length}
           />
+
+          {/* Figma Style Multi-Page Floating Tab Bar (Bottom Left) */}
+          <div className="absolute bottom-3 left-3 z-30 pointer-events-auto">
+            <CanvasPagesTabBar
+              pages={pages}
+              activePageId={activePageId}
+              onSelectPage={(pId) => setActivePageId(pId)}
+              onAddPage={handleAddPage}
+              onUpdatePage={handleUpdatePage}
+              onDeletePage={handleDeletePage}
+              onDuplicatePage={handleDuplicatePage}
+              isReadOnly={isReadOnly || isViewerMode}
+            />
+          </div>
 
           {/* Read Only Watermark Notice for Viewer */}
           {(isReadOnly || isViewerMode) && (
@@ -875,6 +1136,14 @@ export default function ProjectEditorPage() {
         isMiniMapOpen={isMiniMapOpen}
         setIsMiniMapOpen={setIsMiniMapOpen}
         onlineUsers={onlineUsers}
+      />
+
+      {/* Mermaid Diagram Code Editor Modal */}
+      <MermaidEditorModal
+        isOpen={isDiagramModalOpen}
+        onClose={() => setIsDiagramModalOpen(false)}
+        diagram={editingDiagram}
+        onSave={handleSaveDiagram}
       />
 
       {/* Export Modal (DDL / PNG / JSON) */}

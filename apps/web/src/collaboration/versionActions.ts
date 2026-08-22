@@ -1,5 +1,14 @@
 import { ERDDocManager } from './doc';
-import { ERDSnapshot, TableModel, RelationshipModel, NodeView, MemoModel, DomainItem } from '@/types/erd';
+import {
+  ERDSnapshot,
+  TableModel,
+  RelationshipModel,
+  NodeView,
+  MemoModel,
+  DomainItem,
+  DiagramModel,
+  PageModel,
+} from '@/types/erd';
 
 /**
  * Capture the full ERD state snapshot from the active Yjs Doc Manager
@@ -25,6 +34,16 @@ export function captureCurrentSnapshot(manager: ERDDocManager, projectTitle?: st
     memos[key] = JSON.parse(JSON.stringify(val));
   });
 
+  const diagrams: Record<string, DiagramModel> = {};
+  manager.diagramsMap.forEach((val, key) => {
+    diagrams[key] = JSON.parse(JSON.stringify(val));
+  });
+
+  const pages: Record<string, PageModel> = {};
+  manager.pagesMap.forEach((val, key) => {
+    pages[key] = JSON.parse(JSON.stringify(val));
+  });
+
   const domains: DomainItem[] = [];
   manager.domainsMap.forEach((val) => {
     domains.push(JSON.parse(JSON.stringify(val)));
@@ -40,6 +59,8 @@ export function captureCurrentSnapshot(manager: ERDDocManager, projectTitle?: st
     relationships,
     nodes,
     memos,
+    diagrams,
+    pages,
     domains,
     projectTitle: projectTitle || manager.metaMap.get('title'),
     meta,
@@ -68,6 +89,12 @@ export function restoreVersionSnapshotAction(
 
     const currentMemoKeys = Array.from(manager.memosMap.keys());
     currentMemoKeys.forEach((k) => manager.memosMap.delete(k));
+
+    const currentDiagramKeys = Array.from(manager.diagramsMap.keys());
+    currentDiagramKeys.forEach((k) => manager.diagramsMap.delete(k));
+
+    const currentPageKeys = Array.from(manager.pagesMap.keys());
+    currentPageKeys.forEach((k) => manager.pagesMap.delete(k));
 
     const currentDomainKeys = Array.from(manager.domainsMap.keys());
     currentDomainKeys.forEach((k) => manager.domainsMap.delete(k));
@@ -100,14 +127,28 @@ export function restoreVersionSnapshotAction(
       });
     }
 
-    // 6. Restore Domains
+    // 6. Restore Diagrams
+    if (snapshot.diagrams) {
+      Object.entries(snapshot.diagrams).forEach(([k, diag]) => {
+        manager.diagramsMap.set(k, diag);
+      });
+    }
+
+    // 7. Restore Pages
+    if (snapshot.pages) {
+      Object.entries(snapshot.pages).forEach(([k, page]) => {
+        manager.pagesMap.set(k, page);
+      });
+    }
+
+    // 8. Restore Domains
     if (snapshot.domains && Array.isArray(snapshot.domains)) {
       snapshot.domains.forEach((dom) => {
         manager.domainsMap.set(dom.id, dom);
       });
     }
 
-    // 7. Restore Title if present
+    // 9. Restore Title if present
     if (snapshot.projectTitle) {
       manager.metaMap.set('title', snapshot.projectTitle);
     }
