@@ -108,7 +108,7 @@ export const MermaidEditorModal: React.FC<MermaidEditorModalProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [code, setCode] = useState('');
-  const [theme, setTheme] = useState<'dark' | 'forest' | 'neutral' | 'default'>('dark');
+  const [theme, setTheme] = useState<'dark' | 'pastel' | 'forest' | 'neutral' | 'default'>('pastel');
   const [diagramType, setDiagramType] = useState<DiagramType>('sequence');
   const [isCopied, setIsCopied] = useState(false);
 
@@ -116,7 +116,7 @@ export const MermaidEditorModal: React.FC<MermaidEditorModalProps> = ({
     if (diagram) {
       setTitle(diagram.title || '새 다이어그램');
       setCode(diagram.code || DEFAULT_MERMAID_SEQUENCE);
-      setTheme(diagram.theme || 'dark');
+      setTheme((diagram.theme as any) || 'pastel');
       setDiagramType(diagram.type || 'sequence');
     }
   }, [diagram, isOpen]);
@@ -178,7 +178,8 @@ export const MermaidEditorModal: React.FC<MermaidEditorModalProps> = ({
                 onChange={(e) => setTheme(e.target.value as any)}
                 className="bg-transparent text-xs text-neutral-200 outline-none cursor-pointer"
               >
-                <option value="dark" className="bg-[#242424]">다크 테마 (Dark)</option>
+                <option value="pastel" className="bg-[#242424]">✨ 소프트 파스텔 (추천)</option>
+                <option value="dark" className="bg-[#242424]">🌙 다크 테마 (Dark)</option>
                 <option value="default" className="bg-[#242424]">기본 테마 (Default)</option>
                 <option value="forest" className="bg-[#242424]">포레스트 (Forest)</option>
                 <option value="neutral" className="bg-[#242424]">뉴트럴 (Neutral)</option>
@@ -246,7 +247,11 @@ export const MermaidEditorModal: React.FC<MermaidEditorModalProps> = ({
               </span>
               <span className="text-[10px] text-neutral-500">SVG 벡터 그래픽</span>
             </div>
-            <div className="flex-1 p-4 min-h-0 overflow-auto flex items-center justify-center bg-[#151515]">
+            <div
+              className={`flex-1 p-4 min-h-0 overflow-auto flex items-center justify-center transition-colors ${
+                theme === 'dark' ? 'bg-[#151515]' : 'bg-[#ffffff]'
+              }`}
+            >
               <MermaidViewer code={code} theme={theme} className="w-full h-full" />
             </div>
           </div>

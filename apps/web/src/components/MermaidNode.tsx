@@ -32,8 +32,8 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     onOpenEditor,
   } = data as unknown as MermaidNodeData;
 
-  const customWidth = diagram?.position?.width ?? 480;
-  const customHeight = diagram?.position?.height ?? 380;
+  const customWidth = diagram?.position?.width ?? 600;
+  const customHeight = diagram?.position?.height ?? 420;
 
   const [localSize, setLocalSize] = useState<{ width?: number; height?: number }>({
     width: customWidth,
@@ -42,13 +42,13 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
 
   useEffect(() => {
     setLocalSize({
-      width: diagram?.position?.width ?? 480,
-      height: diagram?.position?.height ?? 380,
+      width: diagram?.position?.width ?? 600,
+      height: diagram?.position?.height ?? 420,
     });
   }, [diagram?.position?.width, diagram?.position?.height]);
 
-  const activeWidth = localSize.width ?? 480;
-  const activeHeight = localSize.height ?? 380;
+  const activeWidth = localSize.width ?? 600;
+  const activeHeight = localSize.height ?? 420;
 
   const getBadgeColor = (type?: string) => {
     switch (type) {
@@ -67,6 +67,8 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     }
   };
 
+  const isDark = diagram?.theme === 'dark';
+
   return (
     <div
       style={{
@@ -76,10 +78,14 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         minHeight: '180px',
       }}
       onDoubleClick={() => !isViewerMode && onOpenEditor(diagram)}
-      className={`bg-[#1c1f24] border rounded-xl shadow-2xl flex flex-col overflow-hidden transition-all group select-none ${
+      className={`border rounded-xl shadow-2xl flex flex-col overflow-hidden transition-all group select-none ${
+        isDark ? 'bg-[#1c1f24] text-neutral-200' : 'bg-[#ffffff] text-neutral-800 border-neutral-200'
+      } ${
         selected
           ? 'border-[#0c8ce9] ring-2 ring-[#0c8ce9]/60 shadow-[0_0_25px_rgba(12,140,233,0.3)]'
-          : 'border-white/10 hover:border-white/25 hover:shadow-xl'
+          : isDark
+          ? 'border-white/10 hover:border-white/25 hover:shadow-xl'
+          : 'border-neutral-200 hover:border-neutral-300 hover:shadow-xl'
       }`}
     >
       <NodeResizer
@@ -106,19 +112,37 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
       />
 
       {/* Header */}
-      <div className="px-3 py-2 bg-[#22272e] border-b border-white/[0.08] flex items-center justify-between shrink-0 gap-2">
+      <div
+        className={`px-3 py-2 border-b flex items-center justify-between shrink-0 gap-2 ${
+          isDark
+            ? 'bg-[#22272e] border-white/[0.08]'
+            : 'bg-[#f8fafc] border-neutral-200/80'
+        }`}
+      >
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-5 h-5 rounded bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
-            <FileCode2 className="w-3 h-3" />
+          <div
+            className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border ${
+              isDark
+                ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-400'
+                : 'bg-indigo-50 border-indigo-200/80 text-indigo-600'
+            }`}
+          >
+            <FileCode2 className="w-3.5 h-3.5" />
           </div>
-          <span className="text-xs font-bold text-neutral-200 truncate">
+          <span
+            className={`text-xs font-bold truncate ${
+              isDark ? 'text-neutral-200' : 'text-neutral-800'
+            }`}
+          >
             {diagram?.title || '다이어그램'}
           </span>
           {diagram?.type && (
             <span
-              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border uppercase tracking-wider ${getBadgeColor(
-                diagram.type
-              )}`}
+              className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border uppercase tracking-wider ${
+                isDark
+                  ? getBadgeColor(diagram.type)
+                  : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+              }`}
             >
               {diagram.type}
             </span>
@@ -131,7 +155,11 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
             <>
               <button
                 onClick={() => onOpenEditor(diagram)}
-                className="p-1 text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors"
+                className={`p-1 rounded transition-colors ${
+                  isDark
+                    ? 'text-neutral-400 hover:text-white hover:bg-white/10'
+                    : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200/70'
+                }`}
                 title="코드 편집 및 프리셋 (더블클릭)"
               >
                 <Pencil className="w-3.5 h-3.5" />
@@ -140,7 +168,11 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               {onDuplicate && (
                 <button
                   onClick={() => onDuplicate(diagram.id)}
-                  className="p-1 text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors"
+                  className={`p-1 rounded transition-colors ${
+                    isDark
+                      ? 'text-neutral-400 hover:text-white hover:bg-white/10'
+                      : 'text-neutral-500 hover:text-neutral-800 hover:bg-neutral-200/70'
+                  }`}
                   title="다이어그램 복제"
                 >
                   <Copy className="w-3.5 h-3.5" />
@@ -149,7 +181,11 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
 
               <button
                 onClick={() => onDelete(diagram.id)}
-                className="p-1 text-neutral-400 hover:text-rose-400 rounded hover:bg-rose-500/10 transition-colors"
+                className={`p-1 rounded transition-colors ${
+                  isDark
+                    ? 'text-neutral-400 hover:text-rose-400 hover:bg-rose-500/10'
+                    : 'text-neutral-400 hover:text-rose-600 hover:bg-rose-50'
+                }`}
                 title="다이어그램 삭제"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -160,10 +196,14 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
       </div>
 
       {/* SVG Canvas Area */}
-      <div className="flex-1 p-3 min-h-0 bg-[#16181d] flex items-center justify-center overflow-hidden">
+      <div
+        className={`flex-1 p-3 min-h-0 flex items-center justify-center overflow-hidden transition-colors ${
+          diagram?.theme === 'dark' ? 'bg-[#16181d]' : 'bg-[#ffffff]'
+        }`}
+      >
         <MermaidViewer
           code={diagram?.code || ''}
-          theme={diagram?.theme || 'dark'}
+          theme={diagram?.theme || 'pastel'}
           className="w-full h-full"
         />
       </div>

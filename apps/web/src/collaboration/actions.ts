@@ -657,8 +657,8 @@ export function addDiagramAction(
     title,
     type: type as any,
     code,
-    theme: 'dark',
-    position: { x, y, width: 480, height: 380 },
+    theme: 'pastel',
+    position: { x, y, width: 640, height: 440 },
     pageId,
   };
 

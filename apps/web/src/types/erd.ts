@@ -103,7 +103,7 @@ export interface DiagramModel {
   title: string;
   type?: DiagramType;
   code: string;
-  theme?: 'dark' | 'forest' | 'neutral' | 'default';
+  theme?: 'dark' | 'pastel' | 'forest' | 'neutral' | 'default';
   position: NodePosition;
   pageId?: string; // Figma 스타일 다중 페이지 소속
 }
