@@ -137,6 +137,86 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   // Real-time Spacebar Pan Cursor Detection
   const [isSpaceDown, setIsSpaceDown] = useState(false);
 
+  // Currently selected node ID for interactive relationship highlighting & dimming
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  // Compute relationship graph & column mappings
+  const relationGraph = useMemo(() => {
+    const tableNeighbors: Record<string, { parents: Set<string>; children: Set<string> }> = {};
+    const tableConnectedEdges: Record<string, Set<string>> = {};
+
+    Object.values(relationships).forEach((rel) => {
+      if (!tableNeighbors[rel.parentTableId]) {
+        tableNeighbors[rel.parentTableId] = { parents: new Set(), children: new Set() };
+      }
+      if (!tableNeighbors[rel.childTableId]) {
+        tableNeighbors[rel.childTableId] = { parents: new Set(), children: new Set() };
+      }
+      tableNeighbors[rel.parentTableId].children.add(rel.childTableId);
+      tableNeighbors[rel.childTableId].parents.add(rel.parentTableId);
+
+      if (!tableConnectedEdges[rel.parentTableId]) {
+        tableConnectedEdges[rel.parentTableId] = new Set();
+      }
+      if (!tableConnectedEdges[rel.childTableId]) {
+        tableConnectedEdges[rel.childTableId] = new Set();
+      }
+      tableConnectedEdges[rel.parentTableId].add(rel.id);
+      tableConnectedEdges[rel.childTableId].add(rel.id);
+    });
+
+    return { tableNeighbors, tableConnectedEdges };
+  }, [relationships]);
+
+  // Compute active focus info based on selected table node
+  const focusInfo = useMemo(() => {
+    if (!selectedNodeId || !tables[selectedNodeId]) {
+      return {
+        hasActiveFocus: false,
+        focusedTableIds: new Set<string>(),
+        focusedEdgeIds: new Set<string>(),
+        focusedColumnMap: {} as Record<string, string[]>,
+      };
+    }
+
+    const focusedTableIds = new Set<string>([selectedNodeId]);
+    const neighbors = relationGraph.tableNeighbors[selectedNodeId];
+    if (neighbors) {
+      neighbors.parents.forEach((id) => focusedTableIds.add(id));
+      neighbors.children.forEach((id) => focusedTableIds.add(id));
+    }
+
+    const focusedEdgeIds = relationGraph.tableConnectedEdges[selectedNodeId] || new Set<string>();
+
+    // Collect mapped columns between selected table and related tables
+    const focusedColumnMap: Record<string, string[]> = {};
+    Object.values(relationships).forEach((rel) => {
+      if (rel.parentTableId === selectedNodeId || rel.childTableId === selectedNodeId) {
+        (rel.columnMappings || []).forEach((mapping) => {
+          if (mapping.parentColumnId) {
+            if (!focusedColumnMap[rel.parentTableId]) focusedColumnMap[rel.parentTableId] = [];
+            if (!focusedColumnMap[rel.parentTableId].includes(mapping.parentColumnId)) {
+              focusedColumnMap[rel.parentTableId].push(mapping.parentColumnId);
+            }
+          }
+          if (mapping.childColumnId) {
+            if (!focusedColumnMap[rel.childTableId]) focusedColumnMap[rel.childTableId] = [];
+            if (!focusedColumnMap[rel.childTableId].includes(mapping.childColumnId)) {
+              focusedColumnMap[rel.childTableId].push(mapping.childColumnId);
+            }
+          }
+        });
+      }
+    });
+
+    return {
+      hasActiveFocus: true,
+      focusedTableIds,
+      focusedEdgeIds,
+      focusedColumnMap,
+    };
+  }, [selectedNodeId, tables, relationGraph, relationships]);
+
   // Convert Yjs tables, memos & diagrams to React Flow Nodes
   const computedNodes: Node[] = useMemo(() => {
     const sortedPages = Object.values(pages || {}).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -167,6 +247,13 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         const isSourceCandidate = selectedParentTableId === table.id;
         const isTargetCandidate = !!selectedParentTableId && selectedParentTableId !== table.id;
 
+        const isDirectlySelected = selectedNodeId === table.id;
+        const isNeighborFocused = focusInfo.hasActiveFocus && !isDirectlySelected && focusInfo.focusedTableIds.has(table.id);
+        const isDimmed = focusInfo.hasActiveFocus && !focusInfo.focusedTableIds.has(table.id);
+        const highlightedColumnIds = focusInfo.hasActiveFocus ? (focusInfo.focusedColumnMap[table.id] || []) : [];
+        const connectedParentsCount = relationGraph.tableNeighbors[table.id]?.parents.size || 0;
+        const connectedChildrenCount = relationGraph.tableNeighbors[table.id]?.children.size || 0;
+
         return {
           id: table.id,
           type: 'tableNode',
@@ -179,6 +266,12 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
             isSourceCandidate,
             isTargetCandidate,
             isViewerMode,
+            isDimmed,
+            isNeighborFocused,
+            isDirectlySelected,
+            highlightedColumnIds,
+            connectedParentsCount,
+            connectedChildrenCount,
             onOpenManualFk: (t: TableModel, c: any) => setManualFkTarget({ table: t, column: c }),
             onUpdateTable: (tId: string, updates: Partial<TableModel>) =>
               !isViewerMode && updateTableAction(manager, tId, updates),
@@ -210,6 +303,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
                   setActiveTool('select');
                 }
               } else {
+                setSelectedNodeId(tId);
                 // Select table node immediately regardless of where inside the table was clicked
                 setRfNodes((prevNodes) =>
                   prevNodes.map((n) => {
@@ -236,6 +330,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         data: {
           memo,
           isViewerMode,
+          isDimmed: focusInfo.hasActiveFocus && selectedNodeId !== memo.id,
           onUpdate: (mId: string, updates: Partial<MemoModel>) =>
             !isViewerMode && updateMemoAction(manager, mId, updates),
           onDelete: (mId: string) => !isViewerMode && deleteMemoAction(manager, mId),
@@ -251,6 +346,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         data: {
           diagram: diag,
           isViewerMode,
+          isDimmed: focusInfo.hasActiveFocus && selectedNodeId !== diag.id,
           onUpdate: (dId: string, updates: Partial<DiagramModel>) =>
             !isViewerMode && updateDiagramAction(manager, dId, updates),
           onDelete: (dId: string) => !isViewerMode && deleteDiagramAction(manager, dId),
@@ -277,6 +373,10 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     canvasSettings.zoomLabelScale,
     domains,
     onOpenDiagramEditor,
+    selectedNodeId,
+    focusInfo,
+    relationGraph,
+    isSpaceDown,
   ]);
 
   // Convert Yjs relationships to React Flow Edges (only visible tables on current page)
@@ -414,6 +514,9 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
       const tOff = targetOffsets[idx] || { y: 0, x: 0 };
       const sOff = sourceOffsets[idx] || { y: 0, x: 0 };
 
+      const isFocused = focusInfo.hasActiveFocus && focusInfo.focusedEdgeIds.has(rel.id);
+      const isDimmed = focusInfo.hasActiveFocus && !isFocused;
+
       return {
         id: rel.id,
         source: rel.parentTableId,
@@ -427,12 +530,25 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           sourceOffsetX: sOff.x,
           targetOffsetY: tOff.y,
           targetOffsetX: tOff.x,
+          isFocused,
+          isDimmed,
+          relationDisplayMode: canvasSettings.relationDisplayMode ?? 'all',
           onEdit: (r: RelationshipModel) => setEditingRelationship(r),
           onDelete: (rId: string) => deleteRelationshipAction(manager, rId),
         },
       };
     });
-  }, [relationships, nodes, tables, activePageId, defaultPageId, pages, manager]);
+  }, [
+    relationships,
+    nodes,
+    tables,
+    activePageId,
+    defaultPageId,
+    pages,
+    manager,
+    focusInfo,
+    canvasSettings.relationDisplayMode,
+  ]);
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(computedNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(computedEdges);
@@ -467,6 +583,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   // When clicking on a node, make it selected and draggable
   const onNodeClick = useCallback(
     (_: any, node: Node) => {
+      setSelectedNodeId(node.id);
       setRfNodes((nodes) =>
         nodes.map((n) => {
           const isTarget = n.id === node.id;
@@ -484,6 +601,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   // Deselect all nodes or create Memo/Diagram stamp on pane click
   const onPaneClick = useCallback(
     (event: React.MouseEvent) => {
+      setSelectedNodeId(null);
       if (activeTool === 'memo' && !isViewerMode && reactFlowInstanceRef?.current) {
         const flowPos = reactFlowInstanceRef.current.screenToFlowPosition({
           x: event.clientX,
@@ -723,6 +841,13 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         onNodeClick={onNodeClick}
         onNodeDragStop={onNodeDragStop}
         onPaneClick={onPaneClick}
+        onSelectionChange={({ nodes }) => {
+          if (nodes.length === 0) {
+            setSelectedNodeId(null);
+          } else if (nodes.length === 1) {
+            setSelectedNodeId(nodes[0].id);
+          }
+        }}
         onConnect={isViewerMode ? undefined : onConnect}
         onInit={(instance) => {
           if (reactFlowInstanceRef) {

@@ -19,6 +19,9 @@ export interface RelationshipEdgeData {
   sourceOffsetX?: number;
   targetOffsetY?: number;
   targetOffsetX?: number;
+  isFocused?: boolean;
+  isDimmed?: boolean;
+  relationDisplayMode?: 'all' | 'focused' | 'hidden';
 }
 
 interface CrowsFootMarkerProps {
@@ -149,6 +152,19 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
 }) => {
   const edgeData = data as unknown as RelationshipEdgeData | undefined;
   const rel = edgeData?.relationship;
+  const isFocused = edgeData?.isFocused ?? false;
+  const isDimmed = edgeData?.isDimmed ?? false;
+  const relationDisplayMode = edgeData?.relationDisplayMode ?? 'all';
+
+  // If relation display mode is hidden, don't render
+  if (relationDisplayMode === 'hidden') {
+    return null;
+  }
+
+  // If relation display mode is focused-only and edge is not focused, don't render
+  if (relationDisplayMode === 'focused' && !isFocused) {
+    return null;
+  }
 
   const adjSourceX = sourceX + (edgeData?.sourceOffsetX || 0);
   const adjSourceY = sourceY + (edgeData?.sourceOffsetY || 0);
@@ -179,18 +195,41 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
       ? 'one'
       : (isIdentifying ? 'mandatory-many' : 'optional-many'));
 
-  const strokeColor = isIdentifying ? '#818cf8' : '#f472b6';
+  const baseStrokeColor = isIdentifying ? '#818cf8' : '#f472b6';
+  const strokeColor = isFocused
+    ? isIdentifying
+      ? '#a5b4fc'
+      : '#f472b6'
+    : baseStrokeColor;
+
+  const strokeWidth = isFocused
+    ? isIdentifying
+      ? 3.2
+      : 2.8
+    : isIdentifying
+    ? 2.2
+    : 1.8;
+
+  const containerOpacity = isDimmed ? 0.08 : 1;
 
   return (
-    <>
+    <g
+      className={`transition-opacity duration-200 ${
+        isDimmed ? 'pointer-events-none' : ''
+      }`}
+      style={{ opacity: containerOpacity }}
+    >
       {/* Main Relationship Line */}
       <BaseEdge
         path={edgePath}
         style={{
           ...style,
           stroke: strokeColor,
-          strokeWidth: isIdentifying ? 2.2 : 1.8,
-          strokeDasharray: isIdentifying ? undefined : '5,4',
+          strokeWidth,
+          strokeDasharray: isIdentifying ? undefined : isFocused ? '6,4' : '5,4',
+          filter: isFocused
+            ? `drop-shadow(0 0 6px ${isIdentifying ? 'rgba(129, 140, 248, 0.7)' : 'rgba(244, 114, 182, 0.7)'})`
+            : undefined,
         }}
       />
 
@@ -215,47 +254,56 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
       />
 
       {/* Center Label Badge with Hover Settings & Delete */}
-      <EdgeLabelRenderer>
-        <div
-          style={{
-            position: 'absolute',
-            transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
-            pointerEvents: 'all',
-          }}
-          className="nodrag nopan group"
-        >
-          <div className="flex items-center gap-1.5 bg-[#0c1017]/95 border border-white/[0.12] hover:border-indigo-500 rounded-full px-2.5 py-0.5 shadow-xl backdrop-blur-md transition-all text-[10px] text-slate-300">
-            <span
-              style={{ color: strokeColor }}
-              className="font-bold font-mono tracking-tight"
+      {!isDimmed && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
+              pointerEvents: 'all',
+              zIndex: isFocused ? 1000 : 10,
+            }}
+            className="nodrag nopan group"
+          >
+            <div
+              className={`flex items-center gap-1.5 bg-[#0c1017]/95 border rounded-full px-2.5 py-0.5 shadow-xl backdrop-blur-md transition-all text-[10px] text-slate-300 ${
+                isFocused
+                  ? 'border-indigo-400 ring-2 ring-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.4)] scale-105'
+                  : 'border-white/[0.12] hover:border-indigo-500'
+              }`}
             >
-              {isIdentifying ? '식별' : '비식별'}
-            </span>
+              <span
+                style={{ color: strokeColor }}
+                className="font-bold font-mono tracking-tight"
+              >
+                {isIdentifying ? '식별' : '비식별'}
+              </span>
 
-            {/* Actions on Hover */}
-            <div className="hidden group-hover:flex items-center gap-1 ml-1 pl-1.5 border-l border-white/[0.1]">
-              {edgeData?.onEdit && rel && (
-                <button
-                  onClick={() => edgeData.onEdit(rel)}
-                  className="p-0.5 hover:text-indigo-400 text-slate-400 rounded transition-colors"
-                  title="관계 속성 설정"
-                >
-                  <Settings2 className="w-3 h-3" />
-                </button>
-              )}
-              {edgeData?.onDelete && (
-                <button
-                  onClick={() => edgeData.onDelete(id)}
-                  className="p-0.5 hover:text-rose-400 text-slate-400 rounded transition-colors"
-                  title="관계 삭제"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              )}
+              {/* Actions on Hover */}
+              <div className="hidden group-hover:flex items-center gap-1 ml-1 pl-1.5 border-l border-white/[0.1]">
+                {edgeData?.onEdit && rel && (
+                  <button
+                    onClick={() => edgeData.onEdit(rel)}
+                    className="p-0.5 hover:text-indigo-400 text-slate-400 rounded transition-colors"
+                    title="관계 속성 설정"
+                  >
+                    <Settings2 className="w-3 h-3" />
+                  </button>
+                )}
+                {edgeData?.onDelete && (
+                  <button
+                    onClick={() => edgeData.onDelete(id)}
+                    className="p-0.5 hover:text-rose-400 text-slate-400 rounded transition-colors"
+                    title="관계 삭제"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </EdgeLabelRenderer>
-    </>
+        </EdgeLabelRenderer>
+      )}
+    </g>
   );
 };

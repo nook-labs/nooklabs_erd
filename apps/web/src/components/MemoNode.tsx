@@ -17,6 +17,7 @@ import {
 export interface MemoNodeData {
   memo: MemoModel;
   isViewerMode?: boolean;
+  isDimmed?: boolean;
   onUpdate: (memoId: string, updates: Partial<MemoModel>) => void;
   onDelete: (memoId: string) => void;
 }
@@ -55,7 +56,7 @@ function resolveFontSizePx(val: any): number {
 }
 
 const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
-  const { memo, onUpdate, onDelete } = data as unknown as MemoNodeData;
+  const { memo, isDimmed = false, onUpdate, onDelete } = data as unknown as MemoNodeData;
   const [content, setContent] = useState(memo?.content || '');
   const isFocusedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -142,8 +143,12 @@ const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         minHeight: `${containerMinHeight}px`,
         height: 'auto',
       }}
-      className={`p-2.5 rounded-xl shadow-lg border flex flex-col justify-start gap-1 transition-all relative group ${
-        selected ? 'ring-2 ring-[#0c8ce9] shadow-2xl' : 'hover:shadow-xl'
+      className={`p-2.5 rounded-xl shadow-lg border flex flex-col justify-start gap-1 transition-all duration-200 relative group ${
+        isDimmed
+          ? 'opacity-20 hover:opacity-85 shadow-none'
+          : selected
+          ? 'ring-2 ring-[#0c8ce9] shadow-2xl'
+          : 'hover:shadow-xl'
       }`}
     >
       <NodeResizer

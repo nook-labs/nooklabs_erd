@@ -16,7 +16,7 @@ import {
   X,
   Maximize2,
 } from 'lucide-react';
-import { DisplayMode } from '@/types/erd';
+import { DisplayMode, RelationDisplayMode } from '@/types/erd';
 
 export interface CanvasSettings {
   backgroundColor: string;
@@ -24,6 +24,7 @@ export interface CanvasSettings {
   gridColor: string;
   zoomLabelScale?: number; // 기본값 1.45
   showZoomLabels?: boolean; // 기본값 true
+  relationDisplayMode?: RelationDisplayMode; // 기본값 'all' ('all' | 'focused' | 'hidden')
 }
 
 
@@ -259,6 +260,60 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                   }`}
                 >
                   동시 표기
+                </button>
+              </div>
+            </div>
+
+            <div className="h-[1px] bg-white/[0.08]" />
+
+            {/* 3.5 Relationship Display Mode Section */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-neutral-300 text-[11px] uppercase tracking-wider block">
+                  관계선 표시 방식 (Relations)
+                </span>
+                <span className="text-[10px] font-mono text-indigo-400 font-semibold">
+                  {(settings.relationDisplayMode ?? 'all') === 'all'
+                    ? '전체 표시'
+                    : settings.relationDisplayMode === 'focused'
+                    ? '포커스시 표시'
+                    : '숨김'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-1 bg-[#181818] p-1 rounded-lg border border-white/[0.08]">
+                <button
+                  onClick={() => onUpdateSettings({ relationDisplayMode: 'all' })}
+                  className={`py-1.5 rounded text-[10px] font-medium transition-all flex flex-col items-center gap-0.5 ${
+                    (settings.relationDisplayMode ?? 'all') === 'all'
+                      ? 'bg-indigo-600/30 border border-indigo-500 text-indigo-200 font-semibold shadow-sm'
+                      : 'border border-transparent text-neutral-400 hover:text-neutral-200'
+                  }`}
+                  title="모든 관계선을 항상 표시하며, 선택 시 스마트 하이라이트/딤을 적용합니다"
+                >
+                  <span>🌐 전체</span>
+                </button>
+                <button
+                  onClick={() => onUpdateSettings({ relationDisplayMode: 'focused' })}
+                  className={`py-1.5 rounded text-[10px] font-medium transition-all flex flex-col items-center gap-0.5 ${
+                    settings.relationDisplayMode === 'focused'
+                      ? 'bg-indigo-600/30 border border-indigo-500 text-indigo-200 font-semibold shadow-sm'
+                      : 'border border-transparent text-neutral-400 hover:text-neutral-200'
+                  }`}
+                  title="평소에는 관계선을 숨겨 깔끔함을 유지하고, 테이블을 클릭할 때만 관계선을 렌더링합니다"
+                >
+                  <span>🎯 포커스</span>
+                </button>
+                <button
+                  onClick={() => onUpdateSettings({ relationDisplayMode: 'hidden' })}
+                  className={`py-1.5 rounded text-[10px] font-medium transition-all flex flex-col items-center gap-0.5 ${
+                    settings.relationDisplayMode === 'hidden'
+                      ? 'bg-rose-600/30 border border-rose-500 text-rose-200 font-semibold shadow-sm'
+                      : 'border border-transparent text-neutral-400 hover:text-neutral-200'
+                  }`}
+                  title="모든 관계선을 숨깁니다"
+                >
+                  <span>👁️ 숨김</span>
                 </button>
               </div>
             </div>

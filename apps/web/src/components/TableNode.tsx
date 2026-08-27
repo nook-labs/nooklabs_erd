@@ -23,6 +23,12 @@ export interface TableNodeData {
   isSourceCandidate?: boolean;
   isTargetCandidate?: boolean;
   isViewerMode?: boolean;
+  isDimmed?: boolean;
+  isNeighborFocused?: boolean;
+  isDirectlySelected?: boolean;
+  highlightedColumnIds?: string[];
+  connectedParentsCount?: number;
+  connectedChildrenCount?: number;
   onOpenManualFk?: (table: TableModel, column: ColumnModel) => void;
   onUpdateTable: (tableId: string, updates: Partial<TableModel>) => void;
   onDuplicateTable: (tableId: string) => void;
@@ -226,6 +232,12 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     isSourceCandidate,
     isTargetCandidate,
     isViewerMode = false,
+    isDimmed = false,
+    isNeighborFocused = false,
+    isDirectlySelected = false,
+    highlightedColumnIds = [],
+    connectedParentsCount = 0,
+    connectedChildrenCount = 0,
     onOpenManualFk,
     onUpdateTable,
     onDuplicateTable,
@@ -492,13 +504,17 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           onTableClick(table.id);
         }
       }}
-      className={`w-max min-w-[460px] bg-[#1e2420] text-white rounded-lg border font-sans text-xs shadow-2xl backdrop-blur-md transition-all overflow-visible relative transform-gpu [text-rendering:geometricPrecision] [backface-visibility:hidden] ${
-        isSourceCandidate
+      className={`w-max min-w-[460px] bg-[#1e2420] text-white rounded-lg border font-sans text-xs shadow-2xl backdrop-blur-md transition-all duration-200 overflow-visible relative transform-gpu [text-rendering:geometricPrecision] [backface-visibility:hidden] ${
+        isDimmed
+          ? 'opacity-20 hover:opacity-85 shadow-none'
+          : isSourceCandidate
           ? 'ring-2 ring-amber-400 border-amber-400/80 scale-[1.01]'
           : isTargetCandidate
           ? 'ring-2 ring-emerald-400 border-emerald-400/80 scale-[1.01]'
           : selected
-          ? 'ring-2 ring-emerald-500 border-emerald-400 shadow-2xl'
+          ? 'ring-2 ring-emerald-500 border-emerald-400 shadow-2xl scale-[1.01]'
+          : isNeighborFocused
+          ? 'ring-2 ring-indigo-500 border-indigo-400 shadow-[0_0_24px_rgba(99,102,241,0.35)] scale-[1.008]'
           : 'border-white/[0.12] hover:border-white/[0.25]'
       }`}
     >
@@ -621,6 +637,21 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/30 border border-white/20 text-white/90 shadow-sm shrink-0">
                 {columns.length} cols
               </span>
+
+              {/* Connected Relationships Badge (Shows if table has incoming/outgoing relations) */}
+              {(connectedParentsCount > 0 || connectedChildrenCount > 0) && (
+                <span
+                  className={`text-[9.5px] font-mono font-semibold px-1.5 py-0.5 rounded transition-colors shadow-sm shrink-0 flex items-center gap-1 ${
+                    selected || isNeighborFocused
+                      ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-400/50'
+                      : 'bg-black/30 text-neutral-300 border border-white/10'
+                  }`}
+                  title={`연결된 관계선: 부모(참조) ${connectedParentsCount}개, 자식(피참조) ${connectedChildrenCount}개`}
+                >
+                  <span className="text-[10px]">🔗</span>
+                  <span>{connectedParentsCount + connectedChildrenCount}</span>
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -675,7 +706,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
             {/* Delete Table */}
             <button
               onClick={() => onDeleteTable(table.id)}
-              className="p-1 hover:bg-rose-900/60 rounded text-white/80 hover:text-rose-200 transition-colors"
+              className="p-1 hover:bg-rose-500/30 rounded text-white/80 hover:text-rose-300 transition-colors"
               title="테이블 삭제"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -684,67 +715,42 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         )}
       </div>
 
-      {/* ERD Cloud Style Columns Table Header (Excel-like Resizable) */}
-      <div className="bg-[#193223]/90 px-2 py-1 text-[10px] text-emerald-300/80 border-b border-emerald-900/40 flex items-center font-mono tracking-tight select-none">
-        {/* Highlight Dot Gutter */}
-        <div className="w-4 shrink-0 text-center" title="속성 강조/체크 표시">●</div>
-        {/* Grip Handle & Row Number Header */}
-        <div className="w-6 shrink-0 text-center font-bold text-emerald-400">#</div>
-        {/* KEY Header */}
-        <div className="w-10 shrink-0 text-center font-bold text-emerald-400">KEY</div>
-        
+      {/* Columns Header (Excel-like Grid Labels) */}
+      <div className="bg-[#181c19] text-neutral-400 font-mono text-[10px] px-2 py-1 flex items-center gap-0.5 border-b border-white/[0.08] select-none font-semibold">
+        <div className="w-4 shrink-0" />
+        <div className="w-6 shrink-0 text-center">#</div>
+        <div className="w-10 shrink-0 text-center">KEY</div>
         {displayMode !== 'physical' && (
-          <div
-            style={{ width: `${getWidth('logicalName')}px` }}
-            className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
-          >
-            <span className="truncate">논리명</span>
-            {!isViewerMode && Boolean(selected) && renderResizer('logicalName', '논리명')}
+          <div style={{ width: `${getWidth('logicalName')}px` }} className="shrink-0 px-1 truncate relative">
+            <span>논리명</span>
+            {renderResizer('logicalName', '논리명')}
           </div>
         )}
-
         {displayMode !== 'logical' && (
-          <div
-            style={{ width: `${getWidth('physicalName')}px` }}
-            className="shrink-0 px-1 font-semibold relative flex items-center justify-between"
-          >
-            <span className="truncate">물리명</span>
-            {!isViewerMode && Boolean(selected) && renderResizer('physicalName', '물리명')}
+          <div style={{ width: `${getWidth('physicalName')}px` }} className="shrink-0 px-1 truncate relative">
+            <span>물리명</span>
+            {renderResizer('physicalName', '물리명')}
           </div>
         )}
-
-        <div
-          style={{ width: `${getWidth('domain')}px` }}
-          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
-        >
-          <span className="truncate">Domain</span>
-          {!isViewerMode && Boolean(selected) && renderResizer('domain', 'Domain')}
+        <div style={{ width: `${getWidth('domain')}px` }} className="shrink-0 px-1 truncate relative">
+          <span>도메인</span>
+          {renderResizer('domain', '도메인')}
         </div>
-
-        <div
-          style={{ width: `${getWidth('type')}px` }}
-          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
-        >
-          <span className="truncate">Type</span>
-          {!isViewerMode && Boolean(selected) && renderResizer('type', 'Type')}
+        <div style={{ width: `${getWidth('type')}px` }} className="shrink-0 px-1 truncate relative">
+          <span>타입</span>
+          {renderResizer('type', '타입')}
         </div>
-
-        <div className="w-16 shrink-0 text-center font-semibold">NOT NULL</div>
-
-        <div
-          style={{ width: `${getWidth('defaultValue')}px` }}
-          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
-        >
-          <span className="truncate">Default value</span>
-          {!isViewerMode && Boolean(selected) && renderResizer('defaultValue', 'Default value')}
+        <div style={{ width: `${getWidth('notNull')}px` }} className="shrink-0 px-1 truncate text-center relative">
+          <span>NN</span>
+          {renderResizer('notNull', 'NN')}
         </div>
-
-        <div
-          style={{ width: `${getWidth('comment')}px` }}
-          className="shrink-0 px-1 font-semibold text-emerald-300/70 relative flex items-center justify-between"
-        >
-          <span className="truncate">Comment</span>
-          {!isViewerMode && Boolean(selected) && renderResizer('comment', 'Comment')}
+        <div style={{ width: `${getWidth('defaultValue')}px` }} className="shrink-0 px-1 truncate relative">
+          <span>기본값</span>
+          {renderResizer('defaultValue', '기본값')}
+        </div>
+        <div style={{ width: `${getWidth('comment')}px` }} className="shrink-0 px-1 truncate relative">
+          <span>설명</span>
+          {renderResizer('comment', '설명')}
         </div>
 
         {/* Row actions space */}
@@ -757,6 +763,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           const isDragTarget = dragOverColId === col.id;
           const isBeingDragged = draggedColId === col.id;
           const isRowEditable = !isViewerMode && Boolean(selected);
+          const isRelationMapped = highlightedColumnIds.includes(col.id);
 
           return (
             <div
@@ -775,7 +782,13 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   : isDragTarget && dragOverPosition === 'below'
                   ? 'border-b-2 !border-b-emerald-400'
                   : ''
-              } ${col.isHighlighted ? 'bg-rose-950/20' : ''}`}
+              } ${
+                isRelationMapped
+                  ? 'bg-indigo-950/45 border-l-2 !border-l-indigo-400 shadow-[inset_0_0_12px_rgba(99,102,241,0.25)] font-semibold'
+                  : col.isHighlighted
+                  ? 'bg-rose-950/20'
+                  : ''
+              }`}
             >
               {/* Highlight / Breakpoint Red Dot Marker */}
               <div className="w-4 shrink-0 flex items-center justify-center nodrag">

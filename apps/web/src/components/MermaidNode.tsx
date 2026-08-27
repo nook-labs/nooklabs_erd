@@ -16,6 +16,7 @@ import {
 export interface MermaidNodeData {
   diagram: DiagramModel;
   isViewerMode?: boolean;
+  isDimmed?: boolean;
   onUpdate: (diagramId: string, updates: Partial<DiagramModel>) => void;
   onDelete: (diagramId: string) => void;
   onDuplicate?: (diagramId: string) => void;
@@ -26,6 +27,7 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
   const {
     diagram,
     isViewerMode = false,
+    isDimmed = false,
     onUpdate,
     onDelete,
     onDuplicate,
@@ -78,15 +80,15 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         minHeight: '180px',
       }}
       onDoubleClick={() => !isViewerMode && onOpenEditor(diagram)}
-      className={`border rounded-xl shadow-2xl flex flex-col overflow-hidden transition-all group select-none ${
-        isDark ? 'bg-[#1c1f24] text-neutral-200' : 'bg-[#ffffff] text-neutral-800 border-neutral-200'
-      } ${
-        selected
+      className={`rounded-2xl border backdrop-blur-xl shadow-2xl flex flex-col justify-start overflow-hidden transition-all duration-200 relative group ${
+        isDimmed
+          ? 'opacity-20 hover:opacity-85 shadow-none'
+          : selected
           ? 'border-[#0c8ce9] ring-2 ring-[#0c8ce9]/60 shadow-[0_0_25px_rgba(12,140,233,0.3)]'
           : isDark
           ? 'border-white/10 hover:border-white/25 hover:shadow-xl'
           : 'border-neutral-200 hover:border-neutral-300 hover:shadow-xl'
-      }`}
+      } ${isDark ? 'bg-[#1c1f24] text-neutral-200' : 'bg-[#ffffff] text-neutral-800'}`}
     >
       <NodeResizer
         isVisible={Boolean(selected) && !isViewerMode}
