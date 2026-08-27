@@ -272,6 +272,11 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           type: 'tableNode',
           position: nodeView.position,
           selected: isDirectlySelected,
+          zIndex: isDirectlySelected ? 100 : isNeighborFocused ? 50 : 1,
+          style: {
+            opacity: isDimmed ? 0.2 : 1,
+            transition: 'opacity 0.2s ease',
+          },
           draggable: isViewerMode ? false : (!isSpaceDown && isDirectlySelected),
           data: {
             table,
@@ -332,6 +337,11 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         type: 'memoNode',
         position: memo.position,
         selected: selectedNodeId === memo.id,
+        zIndex: selectedNodeId === memo.id ? 100 : 1,
+        style: {
+          opacity: focusInfo.hasActiveFocus && selectedNodeId !== memo.id ? 0.2 : 1,
+          transition: 'opacity 0.2s ease',
+        },
         draggable: isViewerMode ? false : (!isSpaceDown && selectedNodeId === memo.id),
         data: {
           memo,
@@ -350,6 +360,11 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         type: 'mermaidNode',
         position: diag.position,
         selected: selectedNodeId === diag.id,
+        zIndex: selectedNodeId === diag.id ? 100 : 1,
+        style: {
+          opacity: focusInfo.hasActiveFocus && selectedNodeId !== diag.id ? 0.2 : 1,
+          transition: 'opacity 0.2s ease',
+        },
         draggable: isViewerMode ? false : (!isSpaceDown && selectedNodeId === diag.id),
         data: {
           diagram: diag,
@@ -524,6 +539,9 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
 
       const isFocused = focusInfo.hasActiveFocus && focusInfo.focusedEdgeIds.has(rel.id);
       const isDimmed = focusInfo.hasActiveFocus && !isFocused;
+      const isHidden =
+        (canvasSettings.relationDisplayMode === 'hidden') ||
+        (canvasSettings.relationDisplayMode === 'focused' && !isFocused);
 
       return {
         id: rel.id,
@@ -532,6 +550,14 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         sourceHandle,
         targetHandle,
         type: 'relationshipEdge',
+        hidden: isHidden,
+        zIndex: isFocused ? 1000 : 1,
+        animated: isFocused,
+        style: {
+          opacity: isDimmed ? 0.08 : 1,
+          pointerEvents: isDimmed ? 'none' : 'auto',
+          transition: 'opacity 0.2s ease',
+        },
         data: {
           relationship: rel,
           sourceOffsetY: sOff.y,

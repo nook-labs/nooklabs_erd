@@ -210,15 +210,8 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
     ? 2.2
     : 1.8;
 
-  const containerOpacity = isDimmed ? 0.08 : 1;
-
   return (
-    <g
-      className={`transition-opacity duration-200 ${
-        isDimmed ? 'pointer-events-none' : ''
-      }`}
-      style={{ opacity: containerOpacity }}
-    >
+    <>
       {/* Main Relationship Line */}
       <BaseEdge
         path={edgePath}
@@ -304,6 +297,6 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
           </div>
         </EdgeLabelRenderer>
       )}
-    </g>
+    </>
   );
 };
