@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Handle, Position, NodeProps } from '@xyflow/react';
+import { Handle, Position, NodeProps, useStore } from '@xyflow/react';
 import { TableModel, ColumnModel, DisplayMode, DomainItem } from '@/types/erd';
 import {
   Key,
@@ -20,6 +20,7 @@ export interface TableNodeData {
   displayMode: DisplayMode;
   domains?: DomainItem[];
   zoomLabelScale?: number;
+  showZoomLabels?: boolean;
   isSourceCandidate?: boolean;
   isTargetCandidate?: boolean;
   isViewerMode?: boolean;
@@ -229,6 +230,8 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     table,
     displayMode,
     domains = [],
+    zoomLabelScale = 1.45,
+    showZoomLabels = true,
     isSourceCandidate,
     isTargetCandidate,
     isViewerMode = false,
@@ -249,6 +252,9 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     onMoveColumn,
     onTableClick,
   } = nodeData;
+
+  // Real-time canvas zoom level for floating large label when zoomed out
+  const zoom = useStore((s) => s.transform[2]);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const isNodeSelected = isDirectlySelected || Boolean(selected);
@@ -505,6 +511,31 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           : 'border-white/[0.12] hover:border-white/[0.25]'
       }`}
     >
+      {/* Floating Large Title Badge when Zoomed Out (줌 아웃 시 타이틀 확대 오버레이) */}
+      {showZoomLabels && zoom < 0.72 && (
+        <div
+          style={{
+            transform: `scale(${(1 / Math.max(zoom, 0.1)) * (zoomLabelScale ?? 1.45) * 0.45})`,
+            transformOrigin: 'bottom center',
+          }}
+          className="absolute -top-12 left-1/2 -translate-x-1/2 pointer-events-none z-50 whitespace-nowrap bg-[#121614]/95 text-white font-extrabold px-3 py-1.5 rounded-lg border border-white/30 shadow-[0_8px_30px_rgba(0,0,0,0.85)] flex items-center gap-2 backdrop-blur-md transition-transform duration-100"
+        >
+          <span
+            style={{ backgroundColor: headerColor }}
+            className="w-2.5 h-2.5 rounded-full ring-1 ring-white/50 shrink-0"
+          />
+          <span className="text-[13px] font-extrabold tracking-tight text-white">
+            {displayMode === 'logical'
+              ? table.logicalName || table.physicalName
+              : displayMode === 'both'
+              ? `${table.logicalName || table.physicalName}${table.physicalName ? ` (${table.physicalName})` : ''}`
+              : table.physicalName}
+          </span>
+          <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/40 text-neutral-300 border border-white/10 shrink-0">
+            {columns.length} cols
+          </span>
+        </div>
+      )}
 
       {/* React Flow Handles for Drag Connections */}
       <Handle
@@ -1222,10 +1253,18 @@ const areTablePropsEqual = (prevProps: NodeProps, nextProps: NodeProps): boolean
 
   if (prevData.table !== nextData.table) return false;
   if (prevData.displayMode !== nextData.displayMode) return false;
+  if (prevData.zoomLabelScale !== nextData.zoomLabelScale) return false;
+  if (prevData.showZoomLabels !== nextData.showZoomLabels) return false;
+  if (prevData.isDimmed !== nextData.isDimmed) return false;
+  if (prevData.isNeighborFocused !== nextData.isNeighborFocused) return false;
+  if (prevData.isDirectlySelected !== nextData.isDirectlySelected) return false;
+  if (prevData.highlightedColumnIds !== nextData.highlightedColumnIds) return false;
   if (prevData.isSourceCandidate !== nextData.isSourceCandidate) return false;
   if (prevData.isTargetCandidate !== nextData.isTargetCandidate) return false;
   if (prevData.isViewerMode !== nextData.isViewerMode) return false;
   if (prevData.domains !== nextData.domains) return false;
+  if (prevData.connectedParentsCount !== nextData.connectedParentsCount) return false;
+  if (prevData.connectedChildrenCount !== nextData.connectedChildrenCount) return false;
 
   return true;
 };

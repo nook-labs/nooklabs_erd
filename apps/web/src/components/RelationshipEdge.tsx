@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -181,6 +181,8 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
     borderRadius: 14,
   });
 
+  const [isHovered, setIsHovered] = useState(false);
+
   const isIdentifying = rel?.relationshipType === 'identifying';
 
   // Determine source & target multiplicities
@@ -212,6 +214,17 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
 
   return (
     <>
+      {/* Invisible Wide Hitbox for Smooth Hover Detection */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={28}
+        className="cursor-pointer"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      />
+
       {/* Main Relationship Line */}
       <BaseEdge
         path={edgePath}
@@ -246,17 +259,19 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
         isSource={false}
       />
 
-      {/* Center Label Badge with Hover Settings & Delete */}
-      {!isDimmed && (
+      {/* Center Label Badge (Shown on Hover or when Focused, never clutters background tables) */}
+      {!isDimmed && (isFocused || isHovered) && (
         <EdgeLabelRenderer>
           <div
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: 'all',
-              zIndex: isFocused ? 1000 : 10,
+              zIndex: isFocused ? 1000 : 80,
             }}
-            className="nodrag nopan group"
+            className="nodrag nopan group animate-in fade-in zoom-in-95 duration-100"
           >
             <div
               className={`flex items-center gap-1.5 bg-[#0c1017]/95 border rounded-full px-2.5 py-0.5 shadow-xl backdrop-blur-md transition-all text-[10px] text-slate-300 ${
