@@ -134,6 +134,7 @@ export default function ProjectEditorPage() {
       gridColor: 'rgba(255, 255, 255, 0.12)',
       zoomLabelScale: 1.45,
       showZoomLabels: true,
+      relationDisplayMode: 'all',
     };
   });
 

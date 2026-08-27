@@ -251,6 +251,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
   } = nodeData;
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const isNodeSelected = isDirectlySelected || Boolean(selected);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const [activeTypeDropdown, setActiveTypeDropdown] = useState<string | null>(null);
@@ -486,23 +487,9 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
 
   return (
     <div
-      onClickCapture={() => {
+      onClick={(e) => {
+        // Prevent event bubbling if clicking interactive elements inside
         onTableClick?.(table.id);
-      }}
-      onPointerDownCapture={() => {
-        onTableClick?.(table.id);
-      }}
-      onPointerDown={(e) => {
-        pointerDownPosRef.current = { x: e.clientX, y: e.clientY };
-      }}
-      onPointerUp={(e) => {
-        const dist = Math.hypot(
-          e.clientX - pointerDownPosRef.current.x,
-          e.clientY - pointerDownPosRef.current.y
-        );
-        if (dist < 6 && onTableClick) {
-          onTableClick(table.id);
-        }
       }}
       className={`w-max min-w-[460px] bg-[#1e2420] text-white rounded-lg border font-sans text-xs shadow-2xl backdrop-blur-md transition-all duration-200 overflow-visible relative transform-gpu [text-rendering:geometricPrecision] [backface-visibility:hidden] ${
         isDimmed
@@ -511,7 +498,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           ? 'ring-2 ring-amber-400 border-amber-400/80 scale-[1.01]'
           : isTargetCandidate
           ? 'ring-2 ring-emerald-400 border-emerald-400/80 scale-[1.01]'
-          : selected
+          : isNodeSelected
           ? 'ring-2 ring-emerald-500 border-emerald-400 shadow-2xl scale-[1.01]'
           : isNeighborFocused
           ? 'ring-2 ring-indigo-500 border-indigo-400 shadow-[0_0_24px_rgba(99,102,241,0.35)] scale-[1.008]'
@@ -611,8 +598,8 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           ) : (
             <div
               className="font-bold text-white truncate cursor-pointer hover:opacity-90 flex items-center gap-2 transition-opacity"
-              onDoubleClick={() => !isViewerMode && Boolean(selected) && setIsEditingTitle(true)}
-              title={isViewerMode ? table.physicalName : selected ? '더블 클릭하여 테이블 이름 수정' : '테이블을 클릭하여 선택 후 편집'}
+              onDoubleClick={() => !isViewerMode && isNodeSelected && setIsEditingTitle(true)}
+              title={isViewerMode ? table.physicalName : isNodeSelected ? '더블 클릭하여 테이블 이름 수정' : '테이블을 클릭하여 선택 후 편집'}
             >
               {displayMode === 'logical' ? (
                 <span className="tracking-tight text-white font-extrabold text-[13px]">
@@ -642,7 +629,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               {(connectedParentsCount > 0 || connectedChildrenCount > 0) && (
                 <span
                   className={`text-[9.5px] font-mono font-semibold px-1.5 py-0.5 rounded transition-colors shadow-sm shrink-0 flex items-center gap-1 ${
-                    selected || isNeighborFocused
+                    isNodeSelected || isNeighborFocused
                       ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-400/50'
                       : 'bg-black/30 text-neutral-300 border border-white/10'
                   }`}
@@ -657,7 +644,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         </div>
 
         {/* Action Icons in Header (Only when table is selected and not viewer mode) */}
-        {!isViewerMode && selected && (
+        {!isViewerMode && isNodeSelected && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity nodrag">
             {/* Color Picker */}
             <div className="relative" ref={colorPickerRef}>
@@ -754,7 +741,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         </div>
 
         {/* Row actions space */}
-        {!isViewerMode && selected && <div className="w-14 shrink-0"></div>}
+        {!isViewerMode && isNodeSelected && <div className="w-14 shrink-0"></div>}
       </div>
 
       {/* Columns List (ERD Cloud Grid Row with Drag & Drop Reordering) */}
@@ -762,7 +749,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         {columns.map((col, index) => {
           const isDragTarget = dragOverColId === col.id;
           const isBeingDragged = draggedColId === col.id;
-          const isRowEditable = !isViewerMode && Boolean(selected);
+          const isRowEditable = !isViewerMode && isNodeSelected;
           const isRelationMapped = highlightedColumnIds.includes(col.id);
 
           return (

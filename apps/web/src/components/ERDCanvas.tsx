@@ -140,6 +140,19 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   // Currently selected node ID for interactive relationship highlighting & dimming
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
+  // Reset focus/selection state when switching pages
+  useEffect(() => {
+    setSelectedNodeId(null);
+    setSelectedParentTableId(null);
+  }, [activePageId]);
+
+  // Clean up selectedNodeId if the selected element was deleted
+  useEffect(() => {
+    if (selectedNodeId && !tables[selectedNodeId] && !memos[selectedNodeId] && !diagrams[selectedNodeId]) {
+      setSelectedNodeId(null);
+    }
+  }, [tables, memos, diagrams, selectedNodeId]);
+
   // Compute relationship graph & column mappings
   const relationGraph = useMemo(() => {
     const tableNeighbors: Record<string, { parents: Set<string>; children: Set<string> }> = {};
@@ -258,6 +271,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           id: table.id,
           type: 'tableNode',
           position: nodeView.position,
+          selected: isDirectlySelected,
+          draggable: isViewerMode ? false : (!isSpaceDown && isDirectlySelected),
           data: {
             table,
             displayMode,
@@ -304,17 +319,6 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
                 }
               } else {
                 setSelectedNodeId(tId);
-                // Select table node immediately regardless of where inside the table was clicked
-                setRfNodes((prevNodes) =>
-                  prevNodes.map((n) => {
-                    const isTarget = n.id === tId;
-                    return {
-                      ...n,
-                      selected: isTarget,
-                      draggable: !isSpaceDown && isTarget,
-                    };
-                  })
-                );
               }
             },
           },
@@ -327,6 +331,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         id: memo.id,
         type: 'memoNode',
         position: memo.position,
+        selected: selectedNodeId === memo.id,
+        draggable: isViewerMode ? false : (!isSpaceDown && selectedNodeId === memo.id),
         data: {
           memo,
           isViewerMode,
@@ -343,6 +349,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         id: diag.id,
         type: 'mermaidNode',
         position: diag.position,
+        selected: selectedNodeId === diag.id,
+        draggable: isViewerMode ? false : (!isSpaceDown && selectedNodeId === diag.id),
         data: {
           diagram: diag,
           isViewerMode,
@@ -553,26 +561,17 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(computedNodes);
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState(computedEdges);
 
-  // Keep existing node selection state and update draggable (draggable only when selected)
+  // Directly sync React Flow nodes with computedNodes (selectedNodeId is single source of truth)
   useEffect(() => {
-    setRfNodes((prevNodes) => {
-      const selectedMap = new Map(prevNodes.map((n) => [n.id, n.selected]));
-      return computedNodes.map((n) => {
-        const isSelected = selectedMap.get(n.id) ?? false;
-        return {
-          ...n,
-          selected: isSelected,
-          draggable: isViewerMode ? false : (!isSpaceDown && isSelected),
-        };
-      });
-    });
-  }, [computedNodes, setRfNodes, isViewerMode, isSpaceDown]);
+    setRfNodes(computedNodes);
+  }, [computedNodes, setRfNodes]);
 
+  // Directly sync React Flow edges with computedEdges
   useEffect(() => {
     setRfEdges(computedEdges);
   }, [computedEdges, setRfEdges]);
 
-  // Handle node selection changes to make selected nodes draggable
+  // Handle node position / dimension changes from React Flow
   const handleNodesChange = useCallback(
     (changes: any) => {
       onNodesChange(changes);
@@ -580,28 +579,19 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     [onNodesChange]
   );
 
-  // When clicking on a node, make it selected and draggable
+  // When clicking on a node, set selectedNodeId immediately
   const onNodeClick = useCallback(
     (_: any, node: Node) => {
       setSelectedNodeId(node.id);
-      setRfNodes((nodes) =>
-        nodes.map((n) => {
-          const isTarget = n.id === node.id;
-          return {
-            ...n,
-            selected: isTarget,
-            draggable: isViewerMode ? false : (!isSpaceDown && isTarget),
-          };
-        })
-      );
     },
-    [setRfNodes, isViewerMode, isSpaceDown]
+    []
   );
 
   // Deselect all nodes or create Memo/Diagram stamp on pane click
   const onPaneClick = useCallback(
     (event: React.MouseEvent) => {
       setSelectedNodeId(null);
+
       if (activeTool === 'memo' && !isViewerMode && reactFlowInstanceRef?.current) {
         const flowPos = reactFlowInstanceRef.current.screenToFlowPosition({
           x: event.clientX,
@@ -629,16 +619,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
         setActiveTool('select');
         return;
       }
-
-      setRfNodes((prev) =>
-        prev.map((n) => ({
-          ...n,
-          selected: false,
-          draggable: false,
-        }))
-      );
     },
-    [activeTool, isViewerMode, manager, reactFlowInstanceRef, setActiveTool, setRfNodes, activePageId]
+    [activeTool, isViewerMode, manager, reactFlowInstanceRef, setActiveTool, activePageId]
   );
 
   const onNodeDragStop = useCallback(
