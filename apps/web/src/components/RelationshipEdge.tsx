@@ -21,6 +21,7 @@ export interface RelationshipEdgeData {
   targetOffsetX?: number;
   isFocused?: boolean;
   isDimmed?: boolean;
+  isViewerMode?: boolean;
   relationDisplayMode?: 'all' | 'focused' | 'hidden';
 }
 
@@ -287,27 +288,29 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
                 {isIdentifying ? '식별' : '비식별'}
               </span>
 
-              {/* Actions on Hover */}
-              <div className="hidden group-hover:flex items-center gap-1 ml-1 pl-1.5 border-l border-white/[0.1]">
-                {edgeData?.onEdit && rel && (
-                  <button
-                    onClick={() => edgeData.onEdit(rel)}
-                    className="p-0.5 hover:text-indigo-400 text-slate-400 rounded transition-colors"
-                    title="관계 속성 설정"
-                  >
-                    <Settings2 className="w-3 h-3" />
-                  </button>
-                )}
-                {edgeData?.onDelete && (
-                  <button
-                    onClick={() => edgeData.onDelete(id)}
-                    className="p-0.5 hover:text-rose-400 text-slate-400 rounded transition-colors"
-                    title="관계 삭제"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
+              {/* Actions on Hover (Only when not in viewer mode) */}
+              {!edgeData?.isViewerMode && (
+                <div className="hidden group-hover:flex items-center gap-1 ml-1 pl-1.5 border-l border-white/[0.1]">
+                  {edgeData?.onEdit && rel && (
+                    <button
+                      onClick={() => edgeData.onEdit(rel)}
+                      className="p-0.5 hover:text-indigo-400 text-slate-400 rounded transition-colors"
+                      title="관계 속성 설정"
+                    >
+                      <Settings2 className="w-3 h-3" />
+                    </button>
+                  )}
+                  {edgeData?.onDelete && (
+                    <button
+                      onClick={() => edgeData.onDelete(id)}
+                      className="p-0.5 hover:text-rose-400 text-slate-400 rounded transition-colors"
+                      title="관계 삭제"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </EdgeLabelRenderer>

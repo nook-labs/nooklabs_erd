@@ -7,7 +7,6 @@ import {
   Table2,
   FileText,
   Workflow,
-  Grid3X3,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -26,7 +25,6 @@ interface SidebarProps {
   onAddTable: () => void;
   onAddMemo: () => void;
   onAddDiagram?: () => void;
-  onAutoLayout: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFitView: () => void;
@@ -126,7 +124,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddTable,
   onAddMemo,
   onAddDiagram,
-  onAutoLayout,
   onZoomIn,
   onZoomOut,
   onFitView,
@@ -252,15 +249,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Divider */}
       <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
-
-      {/* Auto Layout */}
-      <button
-        onClick={onAutoLayout}
-        className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-        title="자동 격자 정렬 (Auto Layout)"
-      >
-        <Grid3X3 className="w-3 h-3" />
-      </button>
 
       {/* Zoom Controls at Bottom */}
       <div className="flex flex-col items-center gap-0.5 mt-auto pt-1">

@@ -168,8 +168,23 @@ export default function ProjectEditorPage() {
         }
         return next;
       });
+
+      // Synchronize with Yjs doc metaMap to prevent syncFromYjs from reverting to old values
+      if (manager) {
+        manager.doc.transact(() => {
+          if (updates.backgroundColor !== undefined) {
+            manager.metaMap.set('canvasBg', updates.backgroundColor);
+          }
+          if (updates.gridType !== undefined) {
+            manager.metaMap.set('canvasGrid', updates.gridType);
+          }
+          if (updates.zoomLabelScale !== undefined) {
+            manager.metaMap.set('canvasZoomScale', updates.zoomLabelScale);
+          }
+        }, manager.doc.clientID);
+      }
     },
-    [user?.id]
+    [user?.id, manager]
   );
 
   // Viewer Mode State (Manual toggle for view-only safe browsing)
@@ -545,25 +560,6 @@ export default function ProjectEditorPage() {
   const issues: ValidationIssue[] = useMemo(() => validateSchema(schemaModel), [schemaModel]);
 
   const isReadOnly = myRole === 'viewer';
-
-  // Auto Layout Handler
-  const handleAutoLayout = useCallback(() => {
-    if (!manager || isReadOnly) return;
-    const tableKeys = Object.keys(tables);
-    const cols = Math.ceil(Math.sqrt(tableKeys.length || 1));
-    const spacingX = 420;
-    const spacingY = 320;
-
-    manager.doc.transact(() => {
-      tableKeys.forEach((tblId, index) => {
-        const row = Math.floor(index / cols);
-        const col = index % cols;
-        const x = 100 + col * spacingX;
-        const y = 100 + row * spacingY;
-        updateNodePositionAction(manager, tblId, x, y);
-      });
-    }, manager.doc.clientID);
-  }, [manager, tables, isReadOnly]);
 
   // ERD Operations with Mouse Screen-to-Flow Coordinate Projection
   const handleAddTable = useCallback(
@@ -1016,7 +1012,6 @@ export default function ProjectEditorPage() {
           onAddTable={() => handleAddTable()}
           onAddMemo={() => handleAddMemo()}
           onAddDiagram={() => handleAddDiagram()}
-          onAutoLayout={handleAutoLayout}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onFitView={handleFitView}

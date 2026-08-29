@@ -309,7 +309,10 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
             onMoveColumn: (tId: string, cId: string, direction: 'up' | 'down') =>
               !isViewerMode && moveColumnAction(manager, tId, cId, direction),
             onTableClick: (tId: string) => {
-              if (isViewerMode) return;
+              if (isViewerMode) {
+                setSelectedNodeId((prev) => (prev === tId ? null : tId));
+                return;
+              }
               if (activeTool.startsWith('rel-')) {
                 if (!selectedParentTableId) {
                   setSelectedParentTableId(tId);
@@ -324,7 +327,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
                   setActiveTool('select');
                 }
               } else {
-                setSelectedNodeId(tId);
+                setSelectedNodeId((prev) => (prev === tId ? null : tId));
               }
             },
           },
@@ -568,9 +571,10 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           targetOffsetX: tOff.x,
           isFocused,
           isDimmed,
+          isViewerMode,
           relationDisplayMode: canvasSettings.relationDisplayMode ?? 'all',
-          onEdit: (r: RelationshipModel) => setEditingRelationship(r),
-          onDelete: (rId: string) => deleteRelationshipAction(manager, rId),
+          onEdit: (r: RelationshipModel) => !isViewerMode && setEditingRelationship(r),
+          onDelete: (rId: string) => !isViewerMode && deleteRelationshipAction(manager, rId),
         },
       };
     });
@@ -584,6 +588,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     manager,
     focusInfo,
     canvasSettings.relationDisplayMode,
+    isViewerMode,
   ]);
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState(computedNodes);

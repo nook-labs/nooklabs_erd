@@ -80,7 +80,7 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         minHeight: '180px',
       }}
       onDoubleClick={() => !isViewerMode && onOpenEditor(diagram)}
-      className={`rounded-2xl border backdrop-blur-xl shadow-2xl flex flex-col justify-start overflow-hidden transition-all duration-200 relative group ${
+      className={`rounded-2xl border backdrop-blur-xl shadow-2xl flex flex-col justify-start relative group transition-[border-color,box-shadow,opacity] duration-150 select-none ${
         isDimmed
           ? 'opacity-20 hover:opacity-85 shadow-none'
           : selected
@@ -94,8 +94,9 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         isVisible={Boolean(selected) && !isViewerMode}
         minWidth={280}
         minHeight={180}
-        lineClassName="border-[#0c8ce9]"
-        handleClassName="h-3 w-3 bg-white border-2 border-[#0c8ce9] rounded"
+        keepAspectRatio={false}
+        lineClassName="border-[#0c8ce9] !z-50"
+        handleClassName="!w-3.5 !h-3.5 !bg-white !border-2 !border-[#0c8ce9] !rounded !shadow-lg !z-50 hover:!scale-125 transition-transform"
         onResize={(_, params) => {
           setLocalSize({
             width: Math.round(params.width),
@@ -113,14 +114,16 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         }}
       />
 
-      {/* Header */}
-      <div
-        className={`px-3 py-2 border-b flex items-center justify-between shrink-0 gap-2 ${
-          isDark
-            ? 'bg-[#22272e] border-white/[0.08]'
-            : 'bg-[#f8fafc] border-neutral-200/80'
-        }`}
-      >
+      {/* Inner Rounded Content Container */}
+      <div className="w-full h-full flex flex-col overflow-hidden rounded-2xl">
+        {/* Header */}
+        <div
+          className={`px-3 py-2 border-b flex items-center justify-between shrink-0 gap-2 ${
+            isDark
+              ? 'bg-[#22272e] border-white/[0.08]'
+              : 'bg-[#f8fafc] border-neutral-200/80'
+          }`}
+        >
         <div className="flex items-center gap-2 min-w-0">
           <div
             className={`w-5 h-5 rounded flex items-center justify-center shrink-0 border ${
@@ -209,6 +212,7 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           className="w-full h-full"
         />
       </div>
+      </div>
     </div>
   );
 };
@@ -217,7 +221,11 @@ const areMermaidPropsEqual = (prevProps: NodeProps, nextProps: NodeProps): boole
   if (prevProps.selected !== nextProps.selected) return false;
   const pData = prevProps.data as unknown as MermaidNodeData;
   const nData = nextProps.data as unknown as MermaidNodeData;
-  return pData.diagram === nData.diagram && pData.isViewerMode === nData.isViewerMode;
+  return (
+    pData.diagram === nData.diagram &&
+    pData.isViewerMode === nData.isViewerMode &&
+    pData.isDimmed === nData.isDimmed
+  );
 };
 
 export const MermaidNode = React.memo(MermaidNodeComponent, areMermaidPropsEqual);

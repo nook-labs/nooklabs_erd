@@ -76,6 +76,7 @@ interface ColumnInputProps {
   placeholder?: string;
   className?: string;
   title?: string;
+  readOnly?: boolean;
   disabled?: boolean;
   onCommit: (val: string) => void;
   onEnterPress?: () => void;
@@ -88,6 +89,7 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
   placeholder,
   className,
   title,
+  readOnly = false,
   disabled = false,
   onCommit,
   onEnterPress,
@@ -97,6 +99,7 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
   const [val, setVal] = useState(initialValue || '');
   const isFocusedRef = useRef(false);
   const isComposingRef = useRef(false);
+  const isLocked = readOnly || disabled;
 
   useEffect(() => {
     if (!isFocusedRef.current) {
@@ -105,25 +108,26 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
   }, [initialValue]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (disabled) return;
+    if (isLocked) return;
     const next = e.target.value;
     setVal(next);
   };
 
   const handleBlur = () => {
     isFocusedRef.current = false;
-    if (!disabled) {
+    if (!isLocked) {
       onCommit(val);
     }
   };
 
   const handleFocus = () => {
+    if (isLocked) return;
     isFocusedRef.current = true;
     onFocus?.();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (disabled) return;
+    if (isLocked) return;
     if (e.key === 'Enter' && !isComposingRef.current) {
       onCommit(val);
       if (e.shiftKey) {
@@ -139,10 +143,10 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
     <input
       type="text"
       value={val}
-      disabled={disabled}
+      readOnly={isLocked}
       placeholder={placeholder}
       title={title || placeholder}
-      className={`${className} ${disabled ? 'cursor-default select-text opacity-90' : ''}`}
+      className={`${className} ${isLocked ? 'cursor-pointer select-text opacity-95' : ''}`}
       onChange={handleChange}
       onFocus={handleFocus}
       onBlur={handleBlur}
@@ -152,7 +156,7 @@ const ColumnInput: React.FC<ColumnInputProps> = ({
       }}
       onCompositionEnd={() => {
         isComposingRef.current = false;
-        if (!disabled) {
+        if (!isLocked) {
           onCommit(val);
         }
       }}
@@ -478,16 +482,19 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
   const pointerDownPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Helper component for Resizer Handle
-  const renderResizer = (colKey: string, headerLabel: string) => (
-    <div
-      onPointerDown={(e) => handleResizeStart(colKey, e)}
-      onDoubleClick={(e) => handleAutoFit(colKey, headerLabel, e)}
-      className="nodrag absolute right-0 top-0 bottom-0 w-2 cursor-col-resize select-none flex items-center justify-center group/resizer z-20"
-      title="드래그하여 너비 조절, 더블 클릭 시 글자수에 맞게 자동 조정"
-    >
-      <div className="w-[1.5px] h-3.5 bg-emerald-700/60 group-hover/resizer:bg-emerald-400 group-hover/resizer:w-[2.5px] group-hover/resizer:h-full transition-all" />
-    </div>
-  );
+  const renderResizer = (colKey: string, headerLabel: string) => {
+    if (isViewerMode) return null;
+    return (
+      <div
+        onPointerDown={(e) => handleResizeStart(colKey, e)}
+        onDoubleClick={(e) => handleAutoFit(colKey, headerLabel, e)}
+        className="nodrag absolute right-0 top-0 bottom-0 w-2 cursor-col-resize select-none flex items-center justify-center group/resizer z-20"
+        title="드래그하여 너비 조절, 더블 클릭 시 글자수에 맞게 자동 조정"
+      >
+        <div className="w-[1.5px] h-3.5 bg-emerald-700/60 group-hover/resizer:bg-emerald-400 group-hover/resizer:w-[2.5px] group-hover/resizer:h-full transition-all" />
+      </div>
+    );
+  };
 
   const getWidth = (key: string) => columnWidths[key] || DEFAULT_COLUMN_WIDTHS[key] || 100;
 
@@ -497,7 +504,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         // Prevent event bubbling if clicking interactive elements inside
         onTableClick?.(table.id);
       }}
-      className={`w-max min-w-[460px] bg-[#1e2420] text-white rounded-lg border font-sans text-xs shadow-2xl backdrop-blur-md transition-all duration-200 overflow-visible relative transform-gpu [text-rendering:geometricPrecision] [backface-visibility:hidden] ${
+      className={`w-max min-w-[460px] bg-[#1e2420] text-white rounded-lg border font-sans text-xs shadow-2xl backdrop-blur-md transition-all duration-200 overflow-visible relative transform-gpu [text-rendering:geometricPrecision] [backface-visibility:hidden] cursor-pointer ${
         isDimmed
           ? 'opacity-20 hover:opacity-85 shadow-none'
           : isSourceCandidate
@@ -786,6 +793,11 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           return (
             <div
               key={col.id}
+              onClick={() => {
+                if (isViewerMode) {
+                  onTableClick?.(table.id);
+                }
+              }}
               draggable={isRowEditable}
               onDragStart={(e) => isRowEditable && handleDragStart(e, col.id)}
               onDragOver={(e) => isRowEditable && handleDragOver(e, col.id)}
@@ -904,12 +916,12 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`logic_${col.id}`}
                     initialValue={col.logicalName}
-                    disabled={!isRowEditable}
+                    readOnly={!isRowEditable}
                     placeholder="논리명"
                     className={`bg-transparent text-white/95 px-1 py-0.5 rounded border outline-none w-full text-[11px] font-medium transition-colors ${
                       isRowEditable
                         ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
-                        : 'border-transparent cursor-default'
+                        : 'border-transparent cursor-pointer'
                     }`}
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { logicalName: val })}
                     onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
@@ -926,12 +938,12 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`phys_${col.id}`}
                     initialValue={col.physicalName}
-                    disabled={!isRowEditable}
+                    readOnly={!isRowEditable}
                     placeholder="물리명"
                     className={`bg-transparent text-white px-1 py-0.5 rounded border outline-none w-full text-[11px] font-semibold font-mono transition-colors ${
                       isRowEditable
                         ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
-                        : 'border-transparent cursor-default'
+                        : 'border-transparent cursor-pointer'
                     }`}
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { physicalName: val })}
                     onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
@@ -954,7 +966,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   <ColumnInput
                     key={`domain_${col.id}`}
                     initialValue={col.domain}
-                    disabled={!isRowEditable}
+                    readOnly={!isRowEditable}
                     placeholder="Domain"
                     className="bg-transparent text-emerald-200/90 placeholder:text-neutral-500/60 px-1 py-0.5 outline-none w-full text-[10.5px] italic"
                     onCommit={(val) => onUpdateColumn(table.id, col.id, { domain: val })}
@@ -1039,9 +1051,9 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                 >
                   <input
                     type="text"
-                    disabled={!isRowEditable}
+                    readOnly={!isRowEditable}
                     className={`bg-transparent text-emerald-300 px-1 py-0.5 outline-none w-full text-[10.5px] font-mono lowercase ${
-                      !isRowEditable ? 'cursor-default' : ''
+                      !isRowEditable ? 'cursor-pointer' : ''
                     }`}
                     value={
                       col.type.name
@@ -1091,7 +1103,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                     onWheel={(e) => e.stopPropagation()}
                     className="nowheel nodrag absolute left-0 top-7 z-50 bg-[#1a231d] border border-emerald-500/40 rounded-lg shadow-2xl py-1.5 w-36 max-h-52 overflow-y-auto backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100"
                   >
-                    <div className="px-2 py-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider border-b border-white/10 mb-1">
+                    <div className="px-2.5 py-1 text-[9px] font-bold text-emerald-400 uppercase tracking-wider border-b border-white/10 mb-1">
                       데이터 타입 선택
                     </div>
                     {COMMON_DATA_TYPES.map((dt) => (
@@ -1145,12 +1157,12 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                 <ColumnInput
                   key={`def_${col.id}`}
                   initialValue={col.defaultExpression}
-                  disabled={!isRowEditable}
+                  readOnly={!isRowEditable}
                   placeholder="Default value"
                   className={`bg-transparent text-amber-200/90 placeholder:text-neutral-500/60 px-1 py-0.5 rounded border outline-none w-full text-[10.5px] font-mono transition-colors ${
                     isRowEditable
                       ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
-                      : 'border-transparent cursor-default'
+                      : 'border-transparent cursor-pointer'
                   }`}
                   onCommit={(val) => onUpdateColumn(table.id, col.id, { defaultExpression: val })}
                   onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
@@ -1165,12 +1177,12 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                 <ColumnInput
                   key={`cmt_${col.id}`}
                   initialValue={col.comment}
-                  disabled={!isRowEditable}
+                  readOnly={!isRowEditable}
                   placeholder="Comment"
                   className={`bg-transparent text-neutral-300 placeholder:text-neutral-500/60 px-1 py-0.5 rounded border outline-none w-full text-[10.5px] transition-colors ${
                     isRowEditable
                       ? 'focus:bg-black/40 border-transparent focus:border-emerald-500'
-                      : 'border-transparent cursor-default'
+                      : 'border-transparent cursor-pointer'
                   }`}
                   onCommit={(val) => onUpdateColumn(table.id, col.id, { comment: val })}
                   onShiftEnterPress={() => isRowEditable && onAddColumn(table.id, undefined, index + 1)}
@@ -1233,7 +1245,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
       </div>
 
       {/* Quick Add Row Button to bottom (Only when table is selected and not in viewer mode) */}
-      {!isViewerMode && selected && (
+      {!isViewerMode && isNodeSelected && (
         <button
           onClick={() => onAddColumn(table.id)}
           className="w-full py-1 bg-[#16241a] hover:bg-[#1f3325] text-neutral-300 hover:text-emerald-300 text-[10.5px] font-medium flex items-center justify-center gap-1.5 border-t border-emerald-900/30 rounded-b-lg transition-colors nodrag"

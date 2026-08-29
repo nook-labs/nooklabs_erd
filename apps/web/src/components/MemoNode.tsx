@@ -56,7 +56,7 @@ function resolveFontSizePx(val: any): number {
 }
 
 const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
-  const { memo, isDimmed = false, onUpdate, onDelete } = data as unknown as MemoNodeData;
+  const { memo, isDimmed = false, isViewerMode = false, onUpdate, onDelete } = data as unknown as MemoNodeData;
   const [content, setContent] = useState(memo?.content || '');
   const isFocusedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -143,7 +143,7 @@ const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         minHeight: `${containerMinHeight}px`,
         height: 'auto',
       }}
-      className={`p-2.5 rounded-xl shadow-lg border flex flex-col justify-start gap-1 transition-all duration-200 relative group ${
+      className={`p-2.5 rounded-xl shadow-lg border flex flex-col justify-start gap-1 relative group transition-[opacity,box-shadow,border-color] duration-150 select-none ${
         isDimmed
           ? 'opacity-20 hover:opacity-85 shadow-none'
           : selected
@@ -152,11 +152,12 @@ const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
       }`}
     >
       <NodeResizer
-        isVisible={Boolean(selected)}
+        isVisible={Boolean(selected) && !isViewerMode}
         minWidth={200}
         minHeight={110}
-        lineClassName="border-[#0c8ce9]"
-        handleClassName="h-2.5 w-2.5 bg-white border-2 border-[#0c8ce9] rounded"
+        keepAspectRatio={false}
+        lineClassName="border-[#0c8ce9] !z-50"
+        handleClassName="!w-3 !h-3 !bg-white !border-2 !border-[#0c8ce9] !rounded !shadow-md !z-50 hover:!scale-125 transition-transform"
         onResize={(_, params) => {
           setLocalSize({
             width: Math.round(params.width),
@@ -164,6 +165,7 @@ const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           });
         }}
         onResizeEnd={(_, params) => {
+          if (isViewerMode) return;
           onUpdate(memo.id, {
             position: {
               ...memo.position,
@@ -174,31 +176,34 @@ const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         }}
       />
 
-      {/* Header: Color Swatches & Delete Button */}
-      <div className="flex items-center justify-between pb-1 border-b border-black/10 shrink-0">
-        <div className="flex gap-1.5 nodrag">
-          {COLOR_KEYS.map((c) => (
-            <button
-              key={c}
-              onClick={() => onUpdate(memo.id, { color: c })}
-              style={{ backgroundColor: c }}
-              className={`w-3.5 h-3.5 rounded-full border border-black/20 hover:scale-110 transition-transform ${
-                colorKey === c ? 'ring-2 ring-black/70 ring-offset-1' : ''
-              }`}
-            />
-          ))}
+      {/* Header: Color Swatches & Delete Button (Only in edit mode when selected) */}
+      {!isViewerMode && selected && (
+        <div className="flex items-center justify-between pb-1 border-b border-black/10 shrink-0">
+          <div className="flex gap-1.5 nodrag">
+            {COLOR_KEYS.map((c) => (
+              <button
+                key={c}
+                onClick={() => onUpdate(memo.id, { color: c })}
+                style={{ backgroundColor: c }}
+                className={`w-3.5 h-3.5 rounded-full border border-black/20 hover:scale-110 transition-transform ${
+                  colorKey === c ? 'ring-2 ring-black/70 ring-offset-1' : ''
+                }`}
+              />
+            ))}
+          </div>
+          <button
+            onClick={() => onDelete(memo.id)}
+            className="nodrag p-1 text-black/50 hover:text-rose-700 rounded hover:bg-black/5 transition-colors"
+            title="메모 삭제"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
         </div>
-        <button
-          onClick={() => onDelete(memo.id)}
-          className="nodrag p-1 text-black/50 hover:text-rose-700 rounded hover:bg-black/5 transition-colors"
-          title="메모 삭제"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      )}
 
-      {/* Mini Rich Text Formatting Toolbar */}
-      <div className="nodrag flex items-center justify-between gap-1 py-0.5 px-0.5 border-b border-black/5 text-[11px] shrink-0 select-none flex-wrap">
+      {/* Mini Rich Text Formatting Toolbar (Only in edit mode when selected) */}
+      {!isViewerMode && selected && (
+        <div className="nodrag flex items-center justify-between gap-1 py-0.5 px-0.5 border-b border-black/5 text-[11px] shrink-0 select-none flex-wrap">
         {/* Font Size Stepper & Dropdown (A- / A+ / Size Badge) */}
         <div className="flex items-center gap-0.5 relative">
           <button
@@ -363,6 +368,7 @@ const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           </button>
         </div>
       </div>
+      )}
 
       {/* Main Textarea with Spellcheck Disabled & Custom Text Styles */}
       <textarea
@@ -378,16 +384,19 @@ const MemoNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           isFocusedRef.current = true;
         }}
         onBlur={() => {
+          if (isViewerMode) return;
           isFocusedRef.current = false;
           onUpdate(memo.id, { content });
         }}
         onInput={updateHeight}
         onChange={(e) => {
+          if (isViewerMode) return;
           const val = e.target.value;
           setContent(val);
           onUpdate(memo.id, { content: val });
         }}
-        placeholder="메모를 입력하세요..."
+        readOnly={isViewerMode}
+        placeholder={isViewerMode ? '' : '메모를 입력하세요...'}
         style={{
           color: theme.text,
           fontSize: `${currentFontSizePx}px`,
