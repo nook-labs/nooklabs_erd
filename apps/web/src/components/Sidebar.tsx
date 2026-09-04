@@ -137,7 +137,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // If collapsed, show minimal floating restore button
   if (isCollapsed) {
     return (
-      <div className={`absolute top-2 left-2 z-40 ${isViewerMode ? 'hidden sm:block' : ''}`}>
+      <div className={`absolute top-2 left-2 z-40 ${isViewerMode ? 'compact-hide desktop-only-block' : ''}`}>
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-1.5 bg-[#2c2c2c]/90 hover:bg-[#383838] border border-white/20 rounded-md shadow-xl text-neutral-300 hover:text-white transition-all backdrop-blur-md active:scale-95 flex items-center gap-1 text-[11px] font-medium"
@@ -153,7 +153,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       className={`w-8 sm:w-8.5 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-1 gap-0.5 z-30 select-none overflow-y-auto shrink-0 transition-all ${
-        isViewerMode ? 'hidden sm:flex' : ''
+        isViewerMode ? 'compact-hide desktop-only-flex' : ''
       }`}
     >
       {/* 0. Collapse Sidebar Button */}

@@ -93,8 +93,8 @@ export const CanvasPagesTabBar: React.FC<CanvasPagesTabBarProps> = ({
 
   return (
     <>
-      {/* 1. Mobile Compact Dropdown Pill Button (sm:hidden) */}
-      <div className="sm:hidden relative z-40">
+      {/* 1. Mobile Compact Dropdown Pill Button (모바일 세로 + 가로 모드 완벽 대응) */}
+      <div className="desktop-hide relative z-40">
         <button
           onClick={() => setIsMobileMenuOpen((prev) => !prev)}
           className="flex items-center gap-2 bg-[#1e1e1e]/98 hover:bg-[#282828] active:scale-95 backdrop-blur-xl border border-white/20 px-3.5 py-1.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5)] text-xs font-semibold text-white transition-all select-none"
@@ -172,8 +172,8 @@ export const CanvasPagesTabBar: React.FC<CanvasPagesTabBarProps> = ({
         )}
       </div>
 
-      {/* 2. Desktop Full Tab Bar (hidden sm:flex) */}
-      <div className="hidden sm:flex items-center gap-1 bg-[#1e1e1e]/95 backdrop-blur-md border border-white/10 rounded-lg p-1 shadow-2xl select-none max-w-full z-30">
+      {/* 2. Desktop Full Tab Bar (PC 데스크톱 전용: min-width: 640px AND min-height: 551px) */}
+      <div className="compact-hide desktop-only-flex items-center gap-1 bg-[#1e1e1e]/95 backdrop-blur-md border border-white/10 rounded-lg p-1 shadow-2xl select-none max-w-full z-30">
         <div className="flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-bold text-neutral-400 border-r border-white/10 shrink-0">
           <Layers className="w-3.5 h-3.5 text-[#0c8ce9]" />
           <span>페이지</span>
