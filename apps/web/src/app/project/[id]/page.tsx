@@ -66,7 +66,7 @@ import {
   SaveStatus,
 } from '@/collaboration/supabasePersistence';
 import { validateSchema, ValidationIssue } from '@/validation/validator';
-import { Database, Loader2, X } from 'lucide-react';
+import { Database, Loader2, X, Maximize2 } from 'lucide-react';
 
 export default function ProjectEditorPage() {
   const params = useParams();
@@ -1018,7 +1018,7 @@ export default function ProjectEditorPage() {
 
       {/* Main Workspace Area */}
       <div className="flex flex-1 relative overflow-hidden">
-        {/* Left Floating Sidebar Tool Palette */}
+        {/* Left Floating Sidebar Tool Palette (뷰어 모드일 때 모바일에서 숨김) */}
         <Sidebar
           activeTool={activeTool}
           setActiveTool={setActiveTool}
@@ -1032,6 +1032,7 @@ export default function ProjectEditorPage() {
           onFitView={handleFitView}
           onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
           isEntityListOpen={isEntityListOpen}
+          isViewerMode={isReadOnly || isViewerMode}
         />
 
         {/* ERD Canvas Area */}
@@ -1103,6 +1104,17 @@ export default function ProjectEditorPage() {
               onDuplicatePage={handleDuplicatePage}
               isReadOnly={isReadOnly || isViewerMode}
             />
+          </div>
+
+          {/* Floating Fit View Button (Bottom Right) */}
+          <div className="absolute bottom-3 right-3 z-30 pointer-events-auto">
+            <button
+              onClick={handleFitView}
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-[#1e1e1e]/95 hover:bg-[#2c2c2c] active:scale-95 text-neutral-300 hover:text-white border border-white/15 backdrop-blur-md shadow-2xl transition-all"
+              title="전체 화면 맞춤 (Fit View)"
+            >
+              <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
+            </button>
           </div>
 
           {/* Read Only Watermark Notice for Viewer (3초 후 자동 숨김 및 X 닫기 지원) */}

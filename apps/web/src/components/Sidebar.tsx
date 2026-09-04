@@ -30,6 +30,7 @@ interface SidebarProps {
   onFitView: () => void;
   onToggleEntityList?: () => void;
   isEntityListOpen?: boolean;
+  isViewerMode?: boolean;
 }
 
 // 7 Types of Crow's Foot Icons with Figma Clean Precision
@@ -129,13 +130,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onFitView,
   onToggleEntityList,
   isEntityListOpen = false,
+  isViewerMode = false,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // 뷰어 모드일 때 모바일 화면에서는 아무것도 렌더링하지 않음 (모바일 화면 폭 100% 확보)
+  if (isViewerMode && typeof window !== 'undefined' && window.innerWidth < 640) {
+    return null;
+  }
 
   // If collapsed, show minimal floating restore button
   if (isCollapsed) {
     return (
-      <div className="absolute top-2 left-2 z-40">
+      <div className={`absolute top-2 left-2 z-40 ${isViewerMode ? 'hidden sm:block' : ''}`}>
         <button
           onClick={() => setIsCollapsed(false)}
           className="p-1.5 bg-[#2c2c2c]/90 hover:bg-[#383838] border border-white/20 rounded-md shadow-xl text-neutral-300 hover:text-white transition-all backdrop-blur-md active:scale-95 flex items-center gap-1 text-[11px] font-medium"
@@ -149,7 +156,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }
 
   return (
-    <aside className="w-8 sm:w-8.5 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-1 gap-0.5 z-30 select-none overflow-y-auto shrink-0 transition-all">
+    <aside
+      className={`w-8 sm:w-8.5 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-1 gap-0.5 z-30 select-none overflow-y-auto shrink-0 transition-all ${
+        isViewerMode ? 'hidden sm:flex' : ''
+      }`}
+    >
       {/* 0. Collapse Sidebar Button */}
       <button
         onClick={() => setIsCollapsed(true)}
@@ -161,29 +172,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
 
-      {/* 1. Select Tool */}
-      <button
-        onClick={() => setActiveTool('select')}
-        className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
-          activeTool === 'select'
-            ? 'bg-[#0c8ce9] text-white shadow-sm'
-            : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-        }`}
-        title="선택 / 이동 (V)"
-      >
-        <MousePointer2 className="w-3 h-3" />
-      </button>
+      {/* 뷰어 모드가 아닐 때만 편집 도구들 표시 */}
+      {!isViewerMode && (
+        <>
+          {/* 1. Select Tool */}
+          <button
+            onClick={() => setActiveTool('select')}
+            className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
+              activeTool === 'select'
+                ? 'bg-[#0c8ce9] text-white shadow-sm'
+                : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
+            }`}
+            title="선택 / 이동 (V)"
+          >
+            <MousePointer2 className="w-3 h-3" />
+          </button>
 
-      {/* 2. Add Table */}
-      <button
-        onClick={onAddTable}
-        className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-        title="테이블 추가 (Shift + T)"
-      >
-        <Table2 className="w-3 h-3 text-emerald-400" />
-      </button>
+          {/* 2. Add Table */}
+          <button
+            onClick={onAddTable}
+            className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+            title="테이블 추가 (Shift + T)"
+          >
+            <Table2 className="w-3 h-3 text-emerald-400" />
+          </button>
+        </>
+      )}
 
-      {/* 2.5 Entity List Toggle */}
+      {/* 2.5 Entity List Toggle (뷰어 모드에서도 유용) */}
       {onToggleEntityList && (
         <button
           onClick={onToggleEntityList}
@@ -198,59 +214,63 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
       )}
 
-      {/* 3. Add Memo Tool (Toggles 'memo' stamp tool) */}
-      <button
-        onClick={() => setActiveTool(activeTool === 'memo' ? 'select' : 'memo')}
-        className={`w-6.5 h-6.5 flex items-center justify-center rounded active:scale-95 transition-all relative ${
-          activeTool === 'memo'
-            ? 'bg-amber-500 text-black font-bold shadow-md ring-1 ring-amber-300'
-            : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-        }`}
-        title={activeTool === 'memo' ? '메모지 스탬프 모드 활성화됨 (캔버스를 클릭하여 배치)' : '메모지 생성 (클릭 후 캔버스에 배치 / 단축키: Shift + M)'}
-      >
-        <FileText className={`w-3 h-3 ${activeTool === 'memo' ? 'text-black' : 'text-amber-400'}`} />
-        {activeTool === 'memo' && (
-          <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping" />
-        )}
-      </button>
-
-      {/* 3.5. Add Diagram (Mermaid Flowchart / Sequence) */}
-      {onAddDiagram && (
-        <button
-          onClick={onAddDiagram}
-          className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-          title="Mermaid 다이어그램 추가 (시퀀스/플로우차트 / 단축키: Shift + D)"
-        >
-          <Workflow className="w-3 h-3 text-indigo-400" />
-        </button>
-      )}
-
-      {/* Divider */}
-      <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
-
-      {/* 4~10: All 7 Crow's Foot Relationship Tools */}
-      {ERD_REL_TOOLS.map((item, idx) => {
-        const isSelected = activeTool === item.tool;
-        return (
+      {/* 뷰어 모드가 아닐 때만 메모, 다이어그램, 관계선 도구들 표시 */}
+      {!isViewerMode && (
+        <>
+          {/* 3. Add Memo Tool */}
           <button
-            key={item.tool}
-            onClick={() => setActiveTool(isSelected ? 'select' : item.tool)}
-            className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
-              isSelected
-                ? 'bg-[#0c8ce9] text-white shadow-sm'
+            onClick={() => setActiveTool(activeTool === 'memo' ? 'select' : 'memo')}
+            className={`w-6.5 h-6.5 flex items-center justify-center rounded active:scale-95 transition-all relative ${
+              activeTool === 'memo'
+                ? 'bg-amber-500 text-black font-bold shadow-md ring-1 ring-amber-300'
                 : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
             }`}
-            title={`${idx + 1}. ${item.title}`}
+            title={activeTool === 'memo' ? '메모지 스탬프 모드 활성화됨' : '메모지 생성 (단축키: Shift + M)'}
           >
-            {item.svg}
+            <FileText className={`w-3 h-3 ${activeTool === 'memo' ? 'text-black' : 'text-amber-400'}`} />
+            {activeTool === 'memo' && (
+              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping" />
+            )}
           </button>
-        );
-      })}
 
-      {/* Divider */}
-      <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
+          {/* 3.5. Add Diagram */}
+          {onAddDiagram && (
+            <button
+              onClick={onAddDiagram}
+              className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
+              title="Mermaid 다이어그램 추가 (단축키: Shift + D)"
+            >
+              <Workflow className="w-3 h-3 text-indigo-400" />
+            </button>
+          )}
 
-      {/* Zoom Controls at Bottom */}
+          {/* Divider */}
+          <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
+
+          {/* 4~10: All 7 Crow's Foot Relationship Tools */}
+          {ERD_REL_TOOLS.map((item, idx) => {
+            const isSelected = activeTool === item.tool;
+            return (
+              <button
+                key={item.tool}
+                onClick={() => setActiveTool(isSelected ? 'select' : item.tool)}
+                className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
+                  isSelected
+                    ? 'bg-[#0c8ce9] text-white shadow-sm'
+                    : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
+                }`}
+                title={`${idx + 1}. ${item.title}`}
+              >
+                {item.svg}
+              </button>
+            );
+          })}
+
+          <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
+        </>
+      )}
+
+      {/* Zoom Controls at Bottom (확대 / 축소 / 화면 맞춤) */}
       <div className="flex flex-col items-center gap-0.5 mt-auto pt-1">
         <button
           onClick={onZoomIn}
