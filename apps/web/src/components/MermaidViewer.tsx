@@ -24,7 +24,7 @@ function ensureMermaidInitialized(theme: string = 'pastel') {
       startOnLoad: false,
       theme: 'base',
       securityLevel: 'loose',
-      fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+      fontFamily: 'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", "Helvetica Neue", Arial, sans-serif',
       fontSize: 14,
       logLevel: 'error',
       sequence: {
@@ -55,7 +55,7 @@ function ensureMermaidInitialized(theme: string = 'pastel') {
       flowchart: {
         htmlLabels: true,
         curve: 'basis',
-        padding: 16,
+        padding: 24,
         nodeSpacing: 45,
         rankSpacing: 45,
         useMaxWidth: false,
@@ -175,12 +175,12 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgContent, setSvgContent] = useState<string>(() => {
-    const cacheKey = `${theme}__v7__${code?.trim() || ''}`;
+    const cacheKey = `${theme}__v8__${code?.trim() || ''}`;
     return svgCache.get(cacheKey) || '';
   });
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState<boolean>(() => {
-    const cacheKey = `${theme}__v7__${code?.trim() || ''}`;
+    const cacheKey = `${theme}__v8__${code?.trim() || ''}`;
     return !svgCache.has(cacheKey);
   });
   const rawId = useId();
@@ -198,7 +198,7 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({
         return;
       }
 
-      const cacheKey = `${theme}__v7__${trimmedCode}`;
+      const cacheKey = `${theme}__v8__${trimmedCode}`;
       if (svgCache.has(cacheKey)) {
         setSvgContent(svgCache.get(cacheKey)!);
         setErrorMsg(null);
@@ -223,8 +223,16 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({
           const injectedCss = isDark
             ? `
             <style>
+              #${uniqueId} foreignObject {
+                overflow: visible !important;
+              }
+              #${uniqueId} .nodeLabel, #${uniqueId} .label, #${uniqueId} .cluster-label {
+                overflow: visible !important;
+                white-space: normal !important;
+                font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif !important;
+              }
               #${uniqueId} text {
-                font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+                font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif !important;
                 text-rendering: geometricPrecision !important;
                 -webkit-font-smoothing: antialiased !important;
               }
@@ -255,8 +263,16 @@ export const MermaidViewer: React.FC<MermaidViewerProps> = ({
           `
             : `
             <style>
+              #${uniqueId} foreignObject {
+                overflow: visible !important;
+              }
+              #${uniqueId} .nodeLabel, #${uniqueId} .label, #${uniqueId} .cluster-label {
+                overflow: visible !important;
+                white-space: normal !important;
+                font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif !important;
+              }
               #${uniqueId} text {
-                font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+                font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif !important;
                 text-rendering: geometricPrecision !important;
                 -webkit-font-smoothing: antialiased !important;
               }

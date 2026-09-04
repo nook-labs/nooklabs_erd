@@ -66,7 +66,7 @@ import {
   SaveStatus,
 } from '@/collaboration/supabasePersistence';
 import { validateSchema, ValidationIssue } from '@/validation/validator';
-import { Database, Loader2 } from 'lucide-react';
+import { Database, Loader2, X } from 'lucide-react';
 
 export default function ProjectEditorPage() {
   const params = useParams();
@@ -560,6 +560,21 @@ export default function ProjectEditorPage() {
   const issues: ValidationIssue[] = useMemo(() => validateSchema(schemaModel), [schemaModel]);
 
   const isReadOnly = myRole === 'viewer';
+
+  // Viewer mode watermark notice auto-dismiss timer (3초 후 자동 사라짐)
+  const [showViewerNotice, setShowViewerNotice] = useState(false);
+
+  useEffect(() => {
+    if (isReadOnly || isViewerMode) {
+      setShowViewerNotice(true);
+      const timer = setTimeout(() => {
+        setShowViewerNotice(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowViewerNotice(false);
+    }
+  }, [isReadOnly, isViewerMode]);
 
   // ERD Operations with Mouse Screen-to-Flow Coordinate Projection
   const handleAddTable = useCallback(
@@ -1090,13 +1105,20 @@ export default function ProjectEditorPage() {
             />
           </div>
 
-          {/* Read Only Watermark Notice for Viewer */}
-          {(isReadOnly || isViewerMode) && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1e1e1e]/90 border border-purple-500/30 px-3.5 py-1 rounded-full backdrop-blur-md shadow-xl flex items-center gap-2 text-xs text-neutral-200 pointer-events-none z-20 whitespace-nowrap">
-              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+          {/* Read Only Watermark Notice for Viewer (3초 후 자동 숨김 및 X 닫기 지원) */}
+          {(isReadOnly || isViewerMode) && showViewerNotice && (
+            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1e1e1e]/95 border border-purple-500/40 px-3.5 py-1.5 rounded-full backdrop-blur-md shadow-2xl flex items-center gap-2.5 text-xs text-neutral-200 pointer-events-auto z-30 whitespace-nowrap animate-in fade-in slide-in-from-top-2 duration-200">
+              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0" />
               <span>
                 현재 <strong>{isViewerMode ? '뷰어 모드 (편집 잠금)' : 'Viewer(읽기 전용)'}</strong> 상태입니다.
               </span>
+              <button
+                onClick={() => setShowViewerNotice(false)}
+                className="ml-1 p-0.5 rounded-full text-neutral-400 hover:text-white hover:bg-white/15 transition-colors"
+                title="알림 닫기"
+              >
+                <X className="w-3 h-3" />
+              </button>
             </div>
           )}
 
