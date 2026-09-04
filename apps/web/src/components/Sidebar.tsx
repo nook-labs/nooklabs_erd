@@ -134,11 +134,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // 뷰어 모드일 때 모바일 화면에서는 아무것도 렌더링하지 않음 (모바일 화면 폭 100% 확보)
-  if (isViewerMode && typeof window !== 'undefined' && window.innerWidth < 640) {
-    return null;
-  }
-
   // If collapsed, show minimal floating restore button
   if (isCollapsed) {
     return (

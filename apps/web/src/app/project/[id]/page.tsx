@@ -1093,7 +1093,7 @@ export default function ProjectEditorPage() {
           />
 
           {/* Figma Style Multi-Page Floating Tab Bar (Bottom Left) */}
-          <div className="absolute bottom-3 left-3 z-30 pointer-events-auto">
+          <div className="absolute bottom-3 left-3 z-40 pointer-events-auto">
             <CanvasPagesTabBar
               pages={pages}
               activePageId={activePageId}

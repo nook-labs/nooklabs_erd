@@ -52,8 +52,9 @@ export const CanvasPagesTabBar: React.FC<CanvasPagesTabBarProps> = ({
     { id: 'page_default', name: '메인 ERD', order: 0 }
   ];
 
-  const activePage = displayPages.find((p) => p.id === activePageId) || displayPages[0];
-  const activeIndex = displayPages.findIndex((p) => p.id === activePage.id);
+  const activePage = displayPages.find((p) => p.id === activePageId) || displayPages[0] || { id: 'page_default', name: '메인 ERD', order: 0 };
+  const activePageName = activePage?.name || '메인 ERD';
+  const activeIndex = Math.max(0, displayPages.findIndex((p) => p.id === activePage.id));
 
   useEffect(() => {
     if (editingPageId && editInputRef.current) {
@@ -65,7 +66,7 @@ export const CanvasPagesTabBar: React.FC<CanvasPagesTabBarProps> = ({
   const handleStartRename = (page: PageModel) => {
     if (isReadOnly) return;
     setEditingPageId(page.id);
-    setEditingName(page.name);
+    setEditingName(page.name || '');
     setMenuOpenPageId(null);
   };
 
@@ -76,8 +77,8 @@ export const CanvasPagesTabBar: React.FC<CanvasPagesTabBarProps> = ({
     setEditingPageId(null);
   };
 
-  const getPageIcon = (name: string) => {
-    const lower = name.toLowerCase();
+  const getPageIcon = (name?: string) => {
+    const lower = (name || '').toLowerCase();
     if (lower.includes('erd') || lower.includes('테이블') || lower.includes('table') || lower.includes('db')) {
       return <Table2 className="w-3.5 h-3.5 text-emerald-400" />;
     }
@@ -93,14 +94,14 @@ export const CanvasPagesTabBar: React.FC<CanvasPagesTabBarProps> = ({
   return (
     <>
       {/* 1. Mobile Compact Dropdown Pill Button (sm:hidden) */}
-      <div className="sm:hidden relative">
+      <div className="sm:hidden relative z-40">
         <button
           onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-          className="flex items-center gap-2 bg-[#1e1e1e]/95 hover:bg-[#282828] active:scale-95 backdrop-blur-xl border border-white/15 px-3 py-1.5 rounded-full shadow-2xl text-xs font-semibold text-white transition-all select-none"
+          className="flex items-center gap-2 bg-[#1e1e1e]/98 hover:bg-[#282828] active:scale-95 backdrop-blur-xl border border-white/20 px-3.5 py-1.5 rounded-full shadow-[0_4px_20px_rgba(0,0,0,0.5)] text-xs font-semibold text-white transition-all select-none"
         >
-          <div className="shrink-0">{getPageIcon(activePage.name)}</div>
-          <span className="max-w-[110px] truncate">{activePage.name}</span>
-          <span className="text-[10px] text-neutral-400 bg-white/10 px-1.5 py-0.5 rounded-full font-mono shrink-0">
+          <div className="shrink-0">{getPageIcon(activePageName)}</div>
+          <span className="max-w-[120px] truncate">{activePageName}</span>
+          <span className="text-[10px] text-neutral-300 bg-white/15 px-1.5 py-0.5 rounded-full font-mono shrink-0">
             {activeIndex + 1}/{displayPages.length}
           </span>
           <ChevronDown
