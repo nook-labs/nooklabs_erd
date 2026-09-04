@@ -154,29 +154,3 @@
   stroke-width: 2.8px !important;
   stroke: #818cf8 !important;
 }
-
-/* Compact / Mobile device media query utility (모바일 세로 + 모바일 가로 모드 완벽 대응) */
-@media (max-width: 639px), (max-height: 550px) {
-  .compact-hide {
-    display: none !important;
-  }
-  .compact-show-block {
-    display: block !important;
-  }
-  .compact-show-flex {
-    display: flex !important;
-  }
-}
-
-@media (min-width: 640px) and (min-height: 551px) {
-  .desktop-only-flex {
-    display: flex !important;
-  }
-  .desktop-only-block {
-    display: block !important;
-  }
-  .desktop-hide {
-    display: none !important;
-  }
-}
-
