@@ -17,6 +17,7 @@ export interface MermaidNodeData {
   diagram: DiagramModel;
   isViewerMode?: boolean;
   isDimmed?: boolean;
+  isSearchFocused?: boolean;
   onUpdate: (diagramId: string, updates: Partial<DiagramModel>) => void;
   onDelete: (diagramId: string) => void;
   onDuplicate?: (diagramId: string) => void;
@@ -28,6 +29,7 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     diagram,
     isViewerMode = false,
     isDimmed = false,
+    isSearchFocused = false,
     onUpdate,
     onDelete,
     onDuplicate,
@@ -81,7 +83,9 @@ const MermaidNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
       }}
       onDoubleClick={() => !isViewerMode && onOpenEditor(diagram)}
       className={`rounded-2xl border backdrop-blur-xl shadow-2xl flex flex-col justify-start relative group transition-[border-color,box-shadow,opacity] duration-150 select-none ${
-        isDimmed
+        isSearchFocused
+          ? 'ring-4 ring-indigo-500 border-indigo-400 shadow-[0_0_35px_rgba(99,102,241,0.6)] animate-pulse'
+          : isDimmed
           ? 'opacity-20 hover:opacity-85 shadow-none'
           : selected
           ? 'border-[#0c8ce9] ring-2 ring-[#0c8ce9]/60 shadow-[0_0_25px_rgba(12,140,233,0.3)]'
@@ -224,7 +228,8 @@ const areMermaidPropsEqual = (prevProps: NodeProps, nextProps: NodeProps): boole
   return (
     pData.diagram === nData.diagram &&
     pData.isViewerMode === nData.isViewerMode &&
-    pData.isDimmed === nData.isDimmed
+    pData.isDimmed === nData.isDimmed &&
+    pData.isSearchFocused === nData.isSearchFocused
   );
 };
 

@@ -30,6 +30,8 @@ interface SidebarProps {
   onFitView: () => void;
   onToggleEntityList?: () => void;
   isEntityListOpen?: boolean;
+  onToggleDiagramList?: () => void;
+  isDiagramListOpen?: boolean;
   isViewerMode?: boolean;
 }
 
@@ -130,6 +132,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onFitView,
   onToggleEntityList,
   isEntityListOpen = false,
+  onToggleDiagramList,
+  isDiagramListOpen = false,
   isViewerMode = false,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -206,6 +210,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title="엔티티 목록 (ENTITY)"
         >
           <ListTree className="w-3 h-3" />
+        </button>
+      )}
+
+      {/* 2.6 Diagram List Toggle */}
+      {onToggleDiagramList && (
+        <button
+          onClick={onToggleDiagramList}
+          className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
+            isDiagramListOpen
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
+          }`}
+          title="다이어그램 목록 (Mermaid)"
+        >
+          <Workflow className="w-3 h-3 text-indigo-400" />
         </button>
       )}
 

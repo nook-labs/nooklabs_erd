@@ -83,6 +83,7 @@ interface ERDCanvasProps {
   reactFlowInstanceRef?: React.MutableRefObject<any>;
   canvasSettings: CanvasSettings;
   onOpenDiagramEditor?: (diagram: DiagramModel) => void;
+  focusedDiagramId?: string | null;
 }
 
 const nodeTypes = {
@@ -114,6 +115,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
   reactFlowInstanceRef,
   canvasSettings,
   onOpenDiagramEditor,
+  focusedDiagramId,
 }) => {
   // Pending source table for Relationship creation (Click Parent -> Click Child)
   const [selectedParentTableId, setSelectedParentTableId] = useState<string | null>(null);
@@ -374,6 +376,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
           diagram: diag,
           isViewerMode,
           isDimmed: focusInfo.hasActiveFocus && selectedNodeId !== diag.id,
+          isSearchFocused: diag.id === focusedDiagramId,
           onUpdate: (dId: string, updates: Partial<DiagramModel>) =>
             !isViewerMode && updateDiagramAction(manager, dId, updates),
           onDelete: (dId: string) => !isViewerMode && deleteDiagramAction(manager, dId),
@@ -399,6 +402,7 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     isViewerMode,
     canvasSettings.zoomLabelScale,
     canvasSettings.showZoomLabels,
+    focusedDiagramId,
     domains,
     onOpenDiagramEditor,
     selectedNodeId,

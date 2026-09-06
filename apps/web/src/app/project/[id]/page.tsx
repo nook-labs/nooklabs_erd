@@ -32,9 +32,11 @@ import { ShareModal } from '@/components/ShareModal';
 import { CanvasInspector, CanvasSettings } from '@/components/CanvasInspector';
 import { EntityListPanel } from '@/components/EntityListPanel';
 import { VersionHistoryPanel } from '@/components/VersionHistoryPanel';
-import { GlobalSearchModal } from '@/components/GlobalSearchModal';
+import { GlobalSearchModal, SearchSelectionPayload } from '@/components/GlobalSearchModal';
 import { MermaidEditorModal } from '@/components/MermaidEditorModal';
 import { CanvasPagesTabBar } from '@/components/CanvasPagesTabBar';
+import { DiagramListPanel } from '@/components/DiagramListPanel';
+import { CanvasSearchNavigator } from '@/components/CanvasSearchNavigator';
 import {
   addTableAction,
   deleteTableAction,
@@ -200,6 +202,13 @@ export default function ProjectEditorPage() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
   const [isEntityListOpen, setIsEntityListOpen] = useState(false);
+  const [isDiagramListOpen, setIsDiagramListOpen] = useState(false);
+  const [focusedDiagramId, setFocusedDiagramId] = useState<string | null>(null);
+  const [searchNavState, setSearchNavState] = useState<{
+    query: string;
+    diagramIds: string[];
+    currentIndex: number;
+  } | null>(null);
   const [isVersionHistoryOpen, setIsVersionHistoryOpen] = useState(false);
   const [versions, setVersions] = useState<ProjectVersion[]>([]);
   const reactFlowInstanceRef = useRef<any>(null);
@@ -925,7 +934,11 @@ export default function ProjectEditorPage() {
   }, []);
 
   // Table Focus & Selection Handler (used by Entity List & Global Search)
-  const handleFocusTable = useCallback((tableId: string) => {
+  const handleFocusTable = useCallback((tableId: string, pageId?: string) => {
+    const targetPageId = pageId || 'page_default';
+    if (activePageId !== targetPageId) {
+      setActivePageId(targetPageId);
+    }
     const node = nodes[tableId];
     if (node && reactFlowInstanceRef.current) {
       reactFlowInstanceRef.current.setCenter(
@@ -942,7 +955,125 @@ export default function ProjectEditorPage() {
         );
       }
     }
-  }, [nodes]);
+  }, [nodes, activePageId]);
+
+  // Diagram Focus & Selection Handler
+  const handleFocusDiagram = useCallback((diagramId: string, pageId?: string) => {
+    const diag = diagrams[diagramId];
+    if (!diag) return;
+
+    const targetPageId = pageId || 'page_default';
+    if (activePageId !== targetPageId) {
+      setActivePageId(targetPageId);
+    }
+
+    // Set highlight pulse ring for 4 seconds
+    setFocusedDiagramId(diagramId);
+    setTimeout(() => {
+      setFocusedDiagramId((cur) => (cur === diagramId ? null : cur));
+    }, 4000);
+
+    const w = diag.position?.width || 600;
+    const h = diag.position?.height || 420;
+    if (reactFlowInstanceRef.current) {
+      reactFlowInstanceRef.current.setCenter(
+        diag.position.x + w / 2,
+        diag.position.y + h / 2,
+        { zoom: 1.15, duration: 600 }
+      );
+      if (reactFlowInstanceRef.current.setNodes) {
+        reactFlowInstanceRef.current.setNodes((nds: any[]) =>
+          nds.map((n) => ({
+            ...n,
+            selected: n.id === diagramId,
+          }))
+        );
+      }
+    }
+  }, [diagrams, activePageId]);
+
+  // Memo Focus & Selection Handler
+  const handleFocusMemo = useCallback((memoId: string, pageId?: string) => {
+    const memo = memos[memoId];
+    if (!memo) return;
+
+    const targetPageId = pageId || 'page_default';
+    if (activePageId !== targetPageId) {
+      setActivePageId(targetPageId);
+    }
+
+    const w = memo.position?.width || 240;
+    const h = memo.position?.height || 160;
+    if (reactFlowInstanceRef.current) {
+      reactFlowInstanceRef.current.setCenter(
+        memo.position.x + w / 2,
+        memo.position.y + h / 2,
+        { zoom: 1.25, duration: 600 }
+      );
+      if (reactFlowInstanceRef.current.setNodes) {
+        reactFlowInstanceRef.current.setNodes((nds: any[]) =>
+          nds.map((n) => ({
+            ...n,
+            selected: n.id === memoId,
+          }))
+        );
+      }
+    }
+  }, [memos, activePageId]);
+
+  // Unified Search Selection Handler
+  const handleSelectSearchResult = useCallback((payload: SearchSelectionPayload) => {
+    if (payload.type === 'diagram') {
+      handleFocusDiagram(payload.id, payload.pageId);
+
+      // If multiple diagrams matched same query, activate canvas search navigator
+      if (payload.matchedDiagramIds && payload.matchedDiagramIds.length > 1 && payload.query) {
+        const idx = payload.matchedDiagramIds.indexOf(payload.id);
+        setSearchNavState({
+          query: payload.query,
+          diagramIds: payload.matchedDiagramIds,
+          currentIndex: idx >= 0 ? idx : 0,
+        });
+      } else {
+        setSearchNavState(null);
+      }
+    } else if (payload.type === 'memo') {
+      handleFocusMemo(payload.id, payload.pageId);
+      setSearchNavState(null);
+    } else {
+      handleFocusTable(payload.id, payload.pageId);
+      setSearchNavState(null);
+    }
+  }, [handleFocusDiagram, handleFocusMemo, handleFocusTable]);
+
+  // Navigator Prev / Next
+  const handleNavPrev = useCallback(() => {
+    if (!searchNavState || searchNavState.diagramIds.length === 0) return;
+    const newIndex =
+      searchNavState.currentIndex - 1 >= 0
+        ? searchNavState.currentIndex - 1
+        : searchNavState.diagramIds.length - 1;
+    setSearchNavState((prev) => (prev ? { ...prev, currentIndex: newIndex } : null));
+    const targetId = searchNavState.diagramIds[newIndex];
+    const diag = diagrams[targetId];
+    if (diag) {
+      handleFocusDiagram(targetId, diag.pageId);
+    }
+  }, [searchNavState, diagrams, handleFocusDiagram]);
+
+  const handleNavNext = useCallback(() => {
+    if (!searchNavState || searchNavState.diagramIds.length === 0) return;
+    const newIndex =
+      searchNavState.currentIndex + 1 < searchNavState.diagramIds.length
+        ? searchNavState.currentIndex + 1
+        : 0;
+    setSearchNavState((prev) => (prev ? { ...prev, currentIndex: newIndex } : null));
+    const targetId = searchNavState.diagramIds[newIndex];
+    const diag = diagrams[targetId];
+    if (diag) {
+      handleFocusDiagram(targetId, diag.pageId);
+    }
+  }, [searchNavState, diagrams, handleFocusDiagram]);
 
   // Domain Handlers
   const handleAddDomain = useCallback(
@@ -1032,6 +1163,8 @@ export default function ProjectEditorPage() {
           onFitView={handleFitView}
           onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
           isEntityListOpen={isEntityListOpen}
+          onToggleDiagramList={() => setIsDiagramListOpen((prev) => !prev)}
+          isDiagramListOpen={isDiagramListOpen}
           isViewerMode={isReadOnly || isViewerMode}
         />
 
@@ -1043,6 +1176,23 @@ export default function ProjectEditorPage() {
               <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
               <p className="text-xs text-neutral-300 font-medium">실시간 협업 데이터를 동기화하는 중...</p>
             </div>
+          )}
+
+          {/* Floating Search Navigator Bar (when multiple diagrams matched query) */}
+          {searchNavState && (
+            <CanvasSearchNavigator
+              isOpen={true}
+              query={searchNavState.query}
+              currentIndex={searchNavState.currentIndex}
+              totalMatches={searchNavState.diagramIds.length}
+              currentDiagramTitle={diagrams[searchNavState.diagramIds[searchNavState.currentIndex]]?.title}
+              currentPageName={
+                pages[diagrams[searchNavState.diagramIds[searchNavState.currentIndex]]?.pageId || '']?.name || '메인 ERD'
+              }
+              onPrev={handleNavPrev}
+              onNext={handleNavNext}
+              onClose={() => setSearchNavState(null)}
+            />
           )}
 
           {manager && (
@@ -1065,6 +1215,7 @@ export default function ProjectEditorPage() {
               reactFlowInstanceRef={reactFlowInstanceRef}
               canvasSettings={canvasSettings}
               onOpenDiagramEditor={handleOpenDiagramEditor}
+              focusedDiagramId={focusedDiagramId}
             />
           )}
 
@@ -1077,6 +1228,20 @@ export default function ProjectEditorPage() {
             onFocusTable={handleFocusTable}
             onDeleteTable={handleDeleteTable}
             onAddTable={() => handleAddTable()}
+            isReadOnly={isReadOnly || isViewerMode}
+          />
+
+          {/* Left Sliding Diagram List Panel */}
+          <DiagramListPanel
+            isOpen={isDiagramListOpen}
+            onClose={() => setIsDiagramListOpen(false)}
+            diagrams={diagrams}
+            pages={pages}
+            onFocusDiagram={handleFocusDiagram}
+            onDeleteDiagram={(id) => !isReadOnly && deleteDiagramAction(manager!, id)}
+            onDuplicateDiagram={(id) => !isReadOnly && duplicateDiagramAction(manager!, id)}
+            onOpenDiagramEditor={handleOpenDiagramEditor}
+            onAddDiagram={handleAddDiagram}
             isReadOnly={isReadOnly || isViewerMode}
           />
 
@@ -1218,12 +1383,15 @@ export default function ProjectEditorPage() {
         />
       )}
 
-      {/* Global Search Modal (Ctrl + F: Tables & Columns) */}
+      {/* Global Search Modal (Ctrl + F: Tables, Columns, Diagrams & Memos) */}
       <GlobalSearchModal
         isOpen={isGlobalSearchOpen}
         onClose={() => setIsGlobalSearchOpen(false)}
         tables={tables}
-        onSelectResult={handleFocusTable}
+        diagrams={diagrams}
+        memos={memos}
+        pages={pages}
+        onSelectResult={handleSelectSearchResult}
       />
     </div>
   );
