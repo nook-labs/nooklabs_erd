@@ -238,16 +238,20 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     return hexToRgba(headerColor, 0.45);
   }, [isSelected, headerColor]);
 
-  // Semantic Zoom Threshold: When zoomed out, switch to ultra-clean compact card LOD
-  const isZoomedOut = zoom < 0.72;
+  // Semantic Zoom Threshold: When zoomed out, show crisp anti-collision map badge
+  const isZoomedOut = zoom < 0.78;
+
+  // Controlled scale factor to prevent overlap (max 1.6x instead of 3.6x)
+  const counterScale = useMemo(() => {
+    if (!isZoomedOut) return 1;
+    const baseScale = (1 / Math.max(zoom, 0.35)) * 0.72;
+    return Math.min(1.65, Math.max(1.0, baseScale));
+  }, [zoom, isZoomedOut]);
 
   // Column order resolution
   const columns: ColumnModel[] = (table.columnOrder || [])
     .map((colId) => table.columnsById?.[colId])
     .filter(Boolean) as ColumnModel[];
-
-  const pkColumn = columns.find((c) => c.isPk) || columns[0];
-  const fkCount = columns.filter((c) => c.isFk).length;
 
   // Close color picker on outside click
   useEffect(() => {
@@ -297,12 +301,28 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         backgroundImage: `linear-gradient(to bottom, ${bodyBgColor}, rgba(18, 19, 21, 0.95))`,
         borderColor: bodyBorderColor,
       }}
-      className={`min-w-[210px] ${isZoomedOut ? 'max-w-[270px]' : 'max-w-[340px]'} w-max text-white rounded-[2px] border text-[11px] font-sans shadow-lg select-none relative transition-all duration-150 ${
+      className={`min-w-[220px] max-w-[340px] w-max text-white rounded-[2px] border text-[11px] font-sans shadow-lg select-none relative transition-colors ${
         isSelected
           ? 'ring-1 ring-emerald-400/80 shadow-2xl'
           : 'hover:border-opacity-90'
       }`}
     >
+      {/* Semantic Zoom: Crisp Center-aligned Map Badge (Bounded scale to prevent collision) */}
+      {isZoomedOut && (
+        <div
+          style={{
+            transform: `scale(${counterScale})`,
+            transformOrigin: 'bottom center',
+            backgroundColor: headerColor,
+          }}
+          className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-[2px] shadow-2xl border border-white/60 whitespace-nowrap z-50 pointer-events-none flex items-center gap-1.5 max-w-[140%]"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-white shadow-sm shrink-0" />
+          <span className="font-black text-[12px] text-white tracking-tight leading-none drop-shadow-md truncate">
+            {tableNameDisplay}
+          </span>
+        </div>
+      )}
 
       {/* React Flow Handles for Connection Lines */}
       <Handle
@@ -440,32 +460,9 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         )}
       </div>
 
-      {/* Table Body: Ultra-clean Compact Summary when Zoomed Out vs Full Interactive Column Grid when Zoomed In */}
-      {isZoomedOut ? (
-        <div className="px-2.5 py-1.5 flex items-center justify-between text-[10.5px] font-mono bg-black/40 text-neutral-300 gap-2 border-t border-black/20 select-none">
-          <div className="flex items-center gap-1.5 truncate text-amber-400">
-            <Key className="w-3 h-3 shrink-0" />
-            <span className="font-semibold truncate">
-              {pkColumn?.physicalName || pkColumn?.logicalName || 'id'}
-            </span>
-            <span className="text-neutral-500 text-[9.5px]">
-              ({pkColumn?.type?.name ? pkColumn.type.name.toLowerCase() : 'uuid'})
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {fkCount > 0 && (
-              <span className="px-1.5 py-0.5 rounded-[2px] bg-sky-500/15 border border-sky-500/30 text-sky-400 text-[9px] font-semibold">
-                FK {fkCount}
-              </span>
-            )}
-            <span className="px-1.5 py-0.5 rounded-[2px] bg-white/10 text-neutral-300 text-[9px]">
-              {columns.length} cols
-            </span>
-          </div>
-        </div>
-      ) : (
-        <div className="divide-y divide-white/[0.04]">
-          {columns.map((col, index) => {
+      {/* ERDCloud Columns Body (Strict 3~4 Columns Layout) */}
+      <div className="divide-y divide-white/[0.04]">
+        {columns.map((col, index) => {
           const colName =
             displayMode === 'logical'
               ? col.logicalName || col.physicalName
@@ -645,11 +642,10 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
             </div>
           );
         })}
-        </div>
-      )}
+      </div>
 
-      {/* Minimal Add Column on hover (Only when zoomed in) */}
-      {!isViewerMode && !isZoomedOut && (
+      {/* Minimal Add Column on hover */}
+      {!isViewerMode && (
         <button
           onClick={() => onAddColumn(table.id)}
           className="w-full py-0.5 bg-[#141414] hover:bg-[#202020] text-neutral-500 hover:text-emerald-400 text-[9.5px] flex items-center justify-center gap-1 border-t border-white/[0.04] transition-colors nodrag opacity-0 hover:opacity-100 focus:opacity-100"
