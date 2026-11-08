@@ -52,13 +52,15 @@ const ERDCLOUD_THEME_COLORS = [
   '#212121', // Dark Charcoal
 ];
 
-// Clean Inline Column Input for IME (Korean) Stability
+// Clean Inline Column Input for IME (Korean) Stability + Floating Expansion & Smart Tooltip
 interface MiniInputProps {
   initialValue?: string;
   placeholder?: string;
   className?: string;
   readOnly?: boolean;
   list?: string;
+  expandOnEdit?: boolean;
+  tooltipContent?: string;
   onCommit: (val: string) => void;
   onEnterPress?: () => void;
 }
@@ -69,11 +71,14 @@ const MiniInput: React.FC<MiniInputProps> = ({
   className,
   readOnly = false,
   list,
+  expandOnEdit = false,
+  tooltipContent,
   onCommit,
   onEnterPress,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [val, setVal] = useState(initialValue || '');
+  const [isHovered, setIsHovered] = useState(false);
   const isComposingRef = useRef(false);
 
   useEffect(() => {
@@ -82,13 +87,83 @@ const MiniInput: React.FC<MiniInputProps> = ({
 
   if (!isEditing || readOnly) {
     return (
-      <span
-        onClick={() => !readOnly && setIsEditing(true)}
-        className={`cursor-text select-text truncate block leading-tight ${className}`}
-        title={val || placeholder}
+      <div
+        className="relative w-full group/mini"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
-        {val || <span className="opacity-30">{placeholder}</span>}
-      </span>
+        <span
+          onClick={(e) => {
+            if (!readOnly) {
+              e.stopPropagation();
+              setIsEditing(true);
+            }
+          }}
+          className={`cursor-text select-text truncate block leading-tight ${className}`}
+        >
+          {val || <span className="opacity-30">{placeholder}</span>}
+        </span>
+
+        {/* Instant Dark Tooltip on Hover for truncated or long text */}
+        {isHovered && val && !isEditing && (
+          <div className="absolute right-0 bottom-full mb-1.5 z-50 pointer-events-none animate-in fade-in duration-100">
+            <div className="bg-[#18191c]/95 border border-white/20 text-neutral-100 text-[11px] leading-snug px-2.5 py-1.5 rounded-[3px] shadow-2xl backdrop-blur-md max-w-[280px] whitespace-normal break-words font-sans">
+              {tooltipContent && (
+                <div className="text-[9.5px] text-sky-400 font-mono mb-0.5 font-semibold">
+                  {tooltipContent}
+                </div>
+              )}
+              <div>{val}</div>
+            </div>
+            {/* Tooltip Caret */}
+            <div className="w-2 h-2 bg-[#18191c] border-r border-b border-white/20 rotate-45 ml-auto mr-3 -mt-1" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Floating Expanded Popover Editor when editing comments/long text
+  if (expandOnEdit) {
+    return (
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="absolute right-0 top-1/2 -translate-y-1/2 z-50 min-w-[260px] max-w-[340px] bg-[#1a1b1e] border border-sky-400/90 shadow-2xl rounded-[3px] p-1 nodrag flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-100"
+      >
+        <input
+          type="text"
+          autoFocus
+          value={val}
+          placeholder={placeholder}
+          className="w-full bg-[#111214] text-white text-[11px] px-2 py-1 outline-none rounded-[2px] border border-white/10 nodrag font-sans"
+          onChange={(e) => setVal(e.target.value)}
+          onBlur={() => {
+            setIsEditing(false);
+            onCommit(val);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !isComposingRef.current) {
+              e.preventDefault();
+              setIsEditing(false);
+              onCommit(val);
+              onEnterPress?.();
+            } else if (e.key === 'Escape') {
+              setIsEditing(false);
+              setVal(initialValue || '');
+            }
+          }}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false;
+            onCommit(val);
+          }}
+        />
+        <span className="text-[9px] text-neutral-400 font-mono shrink-0 pr-1 select-none">
+          Enter⏎
+        </span>
+      </div>
     );
   }
 
@@ -99,7 +174,7 @@ const MiniInput: React.FC<MiniInputProps> = ({
       list={list}
       value={val}
       placeholder={placeholder}
-      className={`bg-black/80 text-white outline-none border border-emerald-400/80 px-1 py-0 m-0 leading-tight rounded-none ${className}`}
+      className={`bg-black/80 text-white outline-none border border-emerald-400/80 px-1 py-0 m-0 leading-tight rounded-none nodrag ${className}`}
       onChange={(e) => setVal(e.target.value)}
       onBlur={() => {
         setIsEditing(false);
@@ -163,19 +238,16 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     return hexToRgba(headerColor, 0.45);
   }, [isSelected, headerColor]);
 
-  // Semantic Zoom Threshold: When zoomed out, show large floating map label outside table
-  const isZoomedOut = zoom < 0.78;
-
-  // Counter-scale factor so the floating label maintains a crisp, constant screen size (approx 14px~16px)
-  const counterScale = useMemo(() => {
-    if (!isZoomedOut) return 1;
-    return Math.min(3.6, (1 / Math.max(zoom, 0.22)) * 0.85);
-  }, [zoom, isZoomedOut]);
+  // Semantic Zoom Threshold: When zoomed out, switch to ultra-clean compact card LOD
+  const isZoomedOut = zoom < 0.72;
 
   // Column order resolution
   const columns: ColumnModel[] = (table.columnOrder || [])
     .map((colId) => table.columnsById?.[colId])
     .filter(Boolean) as ColumnModel[];
+
+  const pkColumn = columns.find((c) => c.isPk) || columns[0];
+  const fkCount = columns.filter((c) => c.isFk).length;
 
   // Close color picker on outside click
   useEffect(() => {
@@ -225,28 +297,12 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         backgroundImage: `linear-gradient(to bottom, ${bodyBgColor}, rgba(18, 19, 21, 0.95))`,
         borderColor: bodyBorderColor,
       }}
-      className={`min-w-[220px] max-w-[340px] w-max text-white rounded-[2px] border text-[11px] font-sans shadow-lg select-none relative transition-colors ${
+      className={`min-w-[210px] ${isZoomedOut ? 'max-w-[270px]' : 'max-w-[340px]'} w-max text-white rounded-[2px] border text-[11px] font-sans shadow-lg select-none relative transition-all duration-150 ${
         isSelected
           ? 'ring-1 ring-emerald-400/80 shadow-2xl'
           : 'hover:border-opacity-90'
       }`}
     >
-      {/* Semantic Zoom: Floating Large Map Title (Outside and above table boundary) */}
-      {isZoomedOut && (
-        <div
-          style={{
-            transform: `scale(${counterScale})`,
-            transformOrigin: 'bottom left',
-            backgroundColor: headerColor,
-          }}
-          className="absolute -top-3.5 left-0 px-2 py-0.5 rounded-[2px] shadow-2xl border border-white/40 whitespace-nowrap z-50 pointer-events-none flex items-center gap-1.5"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-white shadow-sm" />
-          <span className="font-black text-[13px] text-white tracking-tight leading-none drop-shadow-md">
-            {tableNameDisplay}
-          </span>
-        </div>
-      )}
 
       {/* React Flow Handles for Connection Lines */}
       <Handle
@@ -301,7 +357,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
       {/* ERDCloud Style Table Header */}
       <div
         style={{ backgroundColor: headerColor }}
-        className="px-2 py-1 min-h-[24px] flex items-center justify-between text-white font-bold text-xs leading-tight group/header relative"
+        className="px-2 py-1 min-h-[24px] flex items-center justify-between text-white font-bold text-xs leading-tight group/header relative cursor-grab active:cursor-grabbing"
       >
         {isEditingTitle && !isViewerMode ? (
           <input
@@ -314,22 +370,20 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               if (e.key === 'Enter') handleFinishTitleEdit();
               if (e.key === 'Escape') setIsEditingTitle(false);
             }}
-            className="bg-black/80 text-white px-1 py-0 text-xs font-bold outline-none w-full border border-white/40 rounded-none"
+            className="bg-black/80 text-white px-1 py-0 text-xs font-bold outline-none w-full border border-white/40 rounded-none nodrag"
           />
         ) : (
           <span
             onDoubleClick={handleStartTitleEdit}
-            className={`truncate tracking-tight cursor-text select-text font-bold text-xs text-white transition-opacity ${
-              isZoomedOut ? 'opacity-0' : 'opacity-100'
-            }`}
-            title="더블클릭하여 테이블 이름 수정"
+            className="truncate tracking-tight font-black text-xs text-white select-none cursor-grab active:cursor-grabbing opacity-100 drop-shadow-sm"
+            title="더블클릭하여 테이블 이름 수정 (드래그하여 이동)"
           >
             {tableNameDisplay}
           </span>
         )}
 
         {/* Minimal Actions on Hover */}
-        {!isViewerMode && (
+        {!isViewerMode && !isZoomedOut && (
           <div className="flex items-center gap-0.5 opacity-0 group-hover/header:opacity-100 transition-opacity nodrag shrink-0 ml-1">
             <button
               onClick={(e) => {
@@ -386,11 +440,32 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         )}
       </div>
 
-      {/* ERDCloud Columns Body (Strict 3~4 Columns Layout) */}
-      <div className={`divide-y divide-white/[0.04] transition-opacity duration-150 ${
-        isZoomedOut ? 'opacity-30' : 'opacity-100'
-      }`}>
-        {columns.map((col, index) => {
+      {/* Table Body: Ultra-clean Compact Summary when Zoomed Out vs Full Interactive Column Grid when Zoomed In */}
+      {isZoomedOut ? (
+        <div className="px-2.5 py-1.5 flex items-center justify-between text-[10.5px] font-mono bg-black/40 text-neutral-300 gap-2 border-t border-black/20 select-none">
+          <div className="flex items-center gap-1.5 truncate text-amber-400">
+            <Key className="w-3 h-3 shrink-0" />
+            <span className="font-semibold truncate">
+              {pkColumn?.physicalName || pkColumn?.logicalName || 'id'}
+            </span>
+            <span className="text-neutral-500 text-[9.5px]">
+              ({pkColumn?.type?.name ? pkColumn.type.name.toLowerCase() : 'uuid'})
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {fkCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-[2px] bg-sky-500/15 border border-sky-500/30 text-sky-400 text-[9px] font-semibold">
+                FK {fkCount}
+              </span>
+            )}
+            <span className="px-1.5 py-0.5 rounded-[2px] bg-white/10 text-neutral-300 text-[9px]">
+              {columns.length} cols
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div className="divide-y divide-white/[0.04]">
+          {columns.map((col, index) => {
           const colName =
             displayMode === 'logical'
               ? col.logicalName || col.physicalName
@@ -406,7 +481,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               className="px-1.5 py-0.5 h-[22px] flex items-center text-[11px] hover:bg-white/[0.06] group/row transition-colors"
             >
               {/* 1. Key Column (PK / FK) */}
-              <div className="w-[18px] shrink-0 flex items-center justify-center nodrag">
+              <div className="w-[18px] shrink-0 flex items-center justify-center">
                 {col.isPk ? (
                   <button
                     disabled={isViewerMode}
@@ -414,14 +489,14 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                       !isViewerMode &&
                       onUpdateColumn(table.id, col.id, { isPk: false })
                     }
-                    className="text-[#f59e0b] hover:opacity-80 transition-opacity"
+                    className="text-[#f59e0b] hover:opacity-80 transition-opacity nodrag"
                     title="기본키 (PK, 클릭 시 해제)"
                   >
                     <Key className="w-2.5 h-2.5" />
                   </button>
                 ) : col.isFk ? (
                   <span
-                    className="text-[#38bdf8] text-[8.5px] font-bold font-mono"
+                    className="text-[#38bdf8] text-[8.5px] font-bold font-mono select-none"
                     title="외래키 (FK)"
                   >
                     FK
@@ -433,7 +508,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                       !isViewerMode &&
                       onUpdateColumn(table.id, col.id, { isPk: true })
                     }
-                    className="w-2.5 h-2.5 opacity-0 group-hover/row:opacity-40 hover:!opacity-100 text-neutral-500"
+                    className="w-2.5 h-2.5 opacity-0 group-hover/row:opacity-40 hover:!opacity-100 text-neutral-500 nodrag"
                     title="기본키(PK)로 설정"
                   >
                     <Key className="w-2.5 h-2.5" />
@@ -442,7 +517,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               </div>
 
               {/* 2. Column Name (물리명 또는 논리명) */}
-              <div className="flex-1 min-w-[70px] pr-1.5 nodrag">
+              <div className="flex-1 min-w-[70px] pr-1.5">
                 <MiniInput
                   initialValue={colName}
                   placeholder="컬럼명"
@@ -462,7 +537,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               </div>
 
               {/* 3. Data Type (bigint(20), varchar(255)... or Domain) */}
-              <div className="w-[70px] shrink-0 nodrag pr-1">
+              <div className="w-[70px] shrink-0 pr-1">
                 <MiniInput
                   initialValue={typeStr}
                   placeholder="type"
@@ -521,14 +596,14 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               </div>
 
               {/* 4. NULL Status (NOT NULL or NULL) */}
-              <div className="w-[50px] shrink-0 text-right nodrag">
+              <div className="w-[50px] shrink-0 text-right">
                 <button
                   disabled={isViewerMode}
                   onClick={() =>
                     !isViewerMode &&
                     onUpdateColumn(table.id, col.id, { nullable: !col.nullable })
                   }
-                  className={`text-[9px] font-mono tracking-tight font-semibold transition-colors ${
+                  className={`text-[9px] font-mono tracking-tight font-semibold transition-colors nodrag ${
                     !col.nullable
                       ? 'text-white'
                       : 'text-neutral-500 hover:text-white'
@@ -539,12 +614,14 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                 </button>
               </div>
 
-              {/* 5. Comment (설명) */}
-              <div className="w-[75px] shrink-0 pl-1.5 nodrag">
+              {/* 5. Comment (설명 - 긴 텍스트 호버 툴팁 + 플로팅 확장 인풋) */}
+              <div className="w-[75px] shrink-0 pl-1.5 relative">
                 <MiniInput
                   initialValue={col.comment}
                   placeholder="설명"
                   readOnly={isViewerMode}
+                  expandOnEdit={true}
+                  tooltipContent={col.comment ? `설명: ${colName}` : undefined}
                   className="w-full text-neutral-300 placeholder:text-neutral-600/70 text-[9.5px] truncate"
                   onCommit={(val) =>
                     onUpdateColumn(table.id, col.id, { comment: val })
@@ -559,7 +636,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               {!isViewerMode && (
                 <button
                   onClick={() => onDeleteColumn(table.id, col.id)}
-                  className="ml-1 opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-rose-400 p-0.5"
+                  className="ml-1 opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-rose-400 p-0.5 nodrag"
                   title="컬럼 삭제"
                 >
                   <Trash2 className="w-2.5 h-2.5" />
@@ -568,10 +645,11 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
             </div>
           );
         })}
-      </div>
+        </div>
+      )}
 
-      {/* Minimal Add Column on hover */}
-      {!isViewerMode && (
+      {/* Minimal Add Column on hover (Only when zoomed in) */}
+      {!isViewerMode && !isZoomedOut && (
         <button
           onClick={() => onAddColumn(table.id)}
           className="w-full py-0.5 bg-[#141414] hover:bg-[#202020] text-neutral-500 hover:text-emerald-400 text-[9.5px] flex items-center justify-center gap-1 border-t border-white/[0.04] transition-colors nodrag opacity-0 hover:opacity-100 focus:opacity-100"
