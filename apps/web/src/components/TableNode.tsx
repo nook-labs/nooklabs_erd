@@ -29,6 +29,8 @@ export interface TableNodeData {
   isViewerMode?: boolean;
   isDirectlySelected?: boolean;
   domains?: DomainItem[];
+  zoomLabelScale?: number;
+  showZoomLabels?: boolean;
   onUpdateTable: (tableId: string, updates: Partial<TableModel>) => void;
   onDeleteTable: (tableId: string) => void;
   onAddColumn: (tableId: string, columnData?: Partial<ColumnModel>, insertIndex?: number) => void;
@@ -210,6 +212,8 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     isViewerMode = false,
     isDirectlySelected = false,
     domains = [],
+    zoomLabelScale = 1.0,
+    showZoomLabels = true,
     onUpdateTable,
     onDeleteTable,
     onAddColumn,
@@ -238,15 +242,16 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     return hexToRgba(headerColor, 0.45);
   }, [isSelected, headerColor]);
 
-  // Semantic Zoom Threshold: When zoomed out, show crisp anti-collision map badge
-  const isZoomedOut = zoom < 0.78;
+  // Semantic Zoom Threshold: When zoomed out, show high-visibility large map badge
+  const isZoomedOut = zoom < 0.85 && showZoomLabels;
 
-  // Controlled scale factor to prevent overlap (max 1.6x instead of 3.6x)
+  // Exact Counter-Scale Factor: Maintains constant large crisp screen font (~16px~20px) at ANY zoom level
   const counterScale = useMemo(() => {
     if (!isZoomedOut) return 1;
-    const baseScale = (1 / Math.max(zoom, 0.35)) * 0.72;
-    return Math.min(1.65, Math.max(1.0, baseScale));
-  }, [zoom, isZoomedOut]);
+    // (1 / zoom) perfectly counteracts canvas zoom so badge stays huge on screen
+    const raw = (1 / Math.max(zoom, 0.1)) * (zoomLabelScale || 1.15);
+    return Math.min(7.5, Math.max(1.0, raw));
+  }, [zoom, isZoomedOut, zoomLabelScale]);
 
   // Column order resolution
   const columns: ColumnModel[] = (table.columnOrder || [])
@@ -307,20 +312,25 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           : 'hover:border-opacity-90'
       }`}
     >
-      {/* Semantic Zoom: Crisp Center-aligned Map Badge (Bounded scale to prevent collision) */}
+      {/* Semantic Zoom: Pure Minimal White Text (No background box & No bold) */}
       {isZoomedOut && (
         <div
           style={{
             transform: `scale(${counterScale})`,
             transformOrigin: 'bottom center',
-            backgroundColor: headerColor,
           }}
-          className="absolute -top-3 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-[2px] shadow-2xl border border-white/60 whitespace-nowrap z-50 pointer-events-none flex items-center gap-1.5 max-w-[140%]"
+          className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap z-50 pointer-events-none flex flex-col items-center justify-center text-center select-none"
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-white shadow-sm shrink-0" />
-          <span className="font-black text-[12px] text-white tracking-tight leading-none drop-shadow-md truncate">
-            {tableNameDisplay}
+          <span className="font-normal text-[15px] text-white tracking-tight leading-none drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+            {displayMode === 'logical'
+              ? table.logicalName || table.physicalName
+              : table.physicalName || table.logicalName}
           </span>
+          {displayMode === 'both' && table.logicalName && table.physicalName && (
+            <span className="text-[12px] font-normal text-white/85 leading-none mt-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.95)]">
+              ({table.logicalName})
+            </span>
+          )}
         </div>
       )}
 
