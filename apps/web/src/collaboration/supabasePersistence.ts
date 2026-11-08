@@ -54,11 +54,16 @@ export function parseByteaToUint8Array(val: any): Uint8Array | null {
   return null;
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export function isUuid(str: string): boolean {
+  return UUID_REGEX.test(str);
+}
+
 /**
  * Supabase DB에서 최신 Yjs 문서를 가져와 Y.Doc에 직접 적용합니다.
  */
 export async function loadDocFromSupabase(projectId: string, doc: Y.Doc): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase || !projectId) {
+  if (!isSupabaseConfigured || !supabase || !projectId || !isUuid(projectId)) {
     return false;
   }
 
@@ -102,7 +107,7 @@ export async function saveDocToSupabase(
   doc: Y.Doc,
   force: boolean = false
 ): Promise<boolean> {
-  if (!isSupabaseConfigured || !supabase || !projectId) {
+  if (!isSupabaseConfigured || !supabase || !projectId || !isUuid(projectId)) {
     return false;
   }
 
@@ -157,6 +162,13 @@ export function createDebouncedDocSaver(
     onStatusChange?: (status: SaveStatus) => void;
   } = {}
 ) {
+  if (!isUuid(projectId)) {
+    options.onStatusChange?.('synced');
+    return {
+      destroy: () => {},
+      flush: async () => true,
+    };
+  }
   const delayMs = options.delayMs ?? 2000;
   let timer: NodeJS.Timeout | null = null;
   let isDestroyed = false;

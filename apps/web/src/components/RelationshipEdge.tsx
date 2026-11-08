@@ -80,7 +80,7 @@ const CrowsFootMarker: React.FC<CrowsFootMarkerProps> = ({
             {/* Vertical bar (|) at x=16 */}
             <line x1="16" y1="-8" x2="16" y2="8" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
             {/* Circle (O) at x=25 */}
-            <circle cx="25" cy="0" r="4.2" fill="#07090e" stroke={color} strokeWidth="2" />
+            <circle cx="25" cy="0" r="4" fill="#1e1f22" stroke={color} strokeWidth="1.8" />
           </>
         );
 
@@ -89,7 +89,7 @@ const CrowsFootMarker: React.FC<CrowsFootMarkerProps> = ({
           <>
             {renderCrowsFoot()}
             {/* Circle (O) at x=18 */}
-            <circle cx="18" cy="0" r="4.2" fill="#07090e" stroke={color} strokeWidth="2" />
+            <circle cx="18" cy="0" r="4" fill="#1e1f22" stroke={color} strokeWidth="1.8" />
           </>
         );
 
@@ -97,9 +97,9 @@ const CrowsFootMarker: React.FC<CrowsFootMarkerProps> = ({
         return (
           <>
             {/* Vertical bar (|) at x=8 */}
-            <line x1="8" y1="-8" x2="8" y2="8" stroke={color} strokeWidth="2.2" strokeLinecap="round" />
+            <line x1="8" y1="-8" x2="8" y2="8" stroke={color} strokeWidth="2" strokeLinecap="round" />
             {/* Circle (O) at x=17 */}
-            <circle cx="17" cy="0" r="4.2" fill="#07090e" stroke={color} strokeWidth="2" />
+            <circle cx="17" cy="0" r="4" fill="#1e1f22" stroke={color} strokeWidth="1.8" />
           </>
         );
 
@@ -198,20 +198,15 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
       ? 'one'
       : (isIdentifying ? 'mandatory-many' : 'optional-many'));
 
-  const baseStrokeColor = isIdentifying ? '#818cf8' : '#f472b6';
+  // Restrained, eye-friendly colors (Jakub Krehel & ERDCloud style)
+  const baseStrokeColor = isIdentifying ? '#38bdf8' : '#e28a7e';
   const strokeColor = isFocused
     ? isIdentifying
-      ? '#a5b4fc'
-      : '#f472b6'
+      ? '#7dd3fc'
+      : '#fca5a5'
     : baseStrokeColor;
 
-  const strokeWidth = isFocused
-    ? isIdentifying
-      ? 3.2
-      : 2.8
-    : isIdentifying
-    ? 2.2
-    : 1.8;
+  const strokeWidth = isFocused ? 2.2 : 1.6;
 
   return (
     <>
@@ -260,7 +255,7 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
         isSource={false}
       />
 
-      {/* Center Label Badge (Shown on Hover or when Focused, never clutters background tables) */}
+      {/* Center Label Badge (Shown on Hover or when Focused, subtle and non-intrusive) */}
       {!isDimmed && (isFocused || isHovered) && (
         <EdgeLabelRenderer>
           <div
@@ -272,13 +267,13 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
               pointerEvents: 'all',
               zIndex: isFocused ? 1000 : 80,
             }}
-            className="nodrag nopan group animate-in fade-in zoom-in-95 duration-100"
+            className="nodrag nopan group"
           >
             <div
-              className={`flex items-center gap-1.5 bg-[#0c1017]/95 border rounded-full px-2.5 py-0.5 shadow-xl backdrop-blur-md transition-all text-[10px] text-slate-300 ${
+              className={`flex items-center gap-1.5 bg-[#181a1d] border rounded-[3px] px-2 py-0.5 shadow-md text-[10px] text-neutral-300 ${
                 isFocused
-                  ? 'border-indigo-400 ring-2 ring-indigo-500/40 shadow-[0_0_15px_rgba(99,102,241,0.4)] scale-105'
-                  : 'border-white/[0.12] hover:border-indigo-500'
+                  ? 'border-emerald-400'
+                  : 'border-white/20 hover:border-white/40'
               }`}
             >
               <span
@@ -290,11 +285,11 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
 
               {/* Actions on Hover (Only when not in viewer mode) */}
               {!edgeData?.isViewerMode && (
-                <div className="hidden group-hover:flex items-center gap-1 ml-1 pl-1.5 border-l border-white/[0.1]">
+                <div className="hidden group-hover:flex items-center gap-1 ml-1 pl-1 border-l border-white/10">
                   {edgeData?.onEdit && rel && (
                     <button
                       onClick={() => edgeData.onEdit(rel)}
-                      className="p-0.5 hover:text-indigo-400 text-slate-400 rounded transition-colors"
+                      className="p-0.5 hover:text-white text-neutral-400 rounded transition-colors"
                       title="관계 속성 설정"
                     >
                       <Settings2 className="w-3 h-3" />
@@ -303,7 +298,7 @@ export const RelationshipEdge: React.FC<EdgeProps> = ({
                   {edgeData?.onDelete && (
                     <button
                       onClick={() => edgeData.onDelete(id)}
-                      className="p-0.5 hover:text-rose-400 text-slate-400 rounded transition-colors"
+                      className="p-0.5 hover:text-rose-400 text-neutral-400 rounded transition-colors"
                       title="관계 삭제"
                     >
                       <Trash2 className="w-3 h-3" />

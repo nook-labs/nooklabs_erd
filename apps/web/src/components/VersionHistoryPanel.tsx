@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ProjectVersion } from '@/types/erd';
+import { ProjectVersion, TableModel, RelationshipModel } from '@/types/erd';
 import {
   History,
   X,
@@ -15,7 +15,9 @@ import {
   Sparkles,
   AlertTriangle,
   Check,
+  Copy,
 } from 'lucide-react';
+import { generateSchemaDiffPrompt } from '@/lib/aiPromptGenerator';
 
 interface VersionHistoryPanelProps {
   isOpen: boolean;
@@ -26,6 +28,9 @@ interface VersionHistoryPanelProps {
   onDeleteVersion: (versionId: string) => void;
   currentTableCount: number;
   currentRelationshipCount: number;
+  currentTables?: Record<string, TableModel>;
+  currentRelationships?: Record<string, RelationshipModel>;
+  projectTitle?: string;
 }
 
 export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
@@ -37,13 +42,40 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   onDeleteVersion,
   currentTableCount,
   currentRelationshipCount,
+  currentTables = {},
+  currentRelationships = {},
+  projectTitle = 'ERD Project',
 }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [versionName, setVersionName] = useState('');
   const [description, setDescription] = useState('');
   const [pendingRestoreVersion, setPendingRestoreVersion] = useState<ProjectVersion | null>(null);
+  const [diffCopiedVersionId, setDiffCopiedVersionId] = useState<string | null>(null);
+  const [diffFeedback, setDiffFeedback] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleCopyDiff = (ver: ProjectVersion) => {
+    if (!ver.snapshot) return;
+
+    const diffText = generateSchemaDiffPrompt({
+      baseSnapshot: ver.snapshot,
+      currentTables,
+      currentRelationships,
+      projectTitle,
+      versionName: ver.name,
+      versionCreatedAt: ver.createdAt ? new Date(ver.createdAt).toLocaleString('ko-KR') : undefined,
+    });
+
+    navigator.clipboard.writeText(diffText);
+    setDiffCopiedVersionId(ver.id);
+    setDiffFeedback(`'${ver.name}' 시점 대비 변경점(Diff) 복사 완료! Cursor나 Claude에 붙여넣어 마이그레이션을 요청하세요.`);
+
+    setTimeout(() => {
+      setDiffCopiedVersionId(null);
+      setDiffFeedback(null);
+    }, 4000);
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,41 +104,59 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
 
   return (
     <>
-      <aside className="fixed right-0 top-12 bottom-0 w-80 sm:w-96 bg-[#18181b] border-l border-white/[0.1] flex flex-col z-40 text-xs text-white shadow-2xl animate-in slide-in-from-right-4 duration-200 select-none">
+      <aside className="absolute right-0 top-0 bottom-0 w-80 sm:w-96 bg-[#262626] border-l border-white/[0.1] flex flex-col z-40 text-xs text-white shadow-2xl animate-in slide-in-from-right-4 duration-200 select-none">
         {/* Header */}
-        <div className="h-12 border-b border-white/[0.08] flex items-center justify-between px-4 bg-[#141416] shrink-0">
+        <div className="h-11 border-b border-white/[0.08] flex items-center justify-between px-3.5 bg-[#2d2d2d] shrink-0">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-              <History className="w-4 h-4" />
+            <div className="w-5 h-5 rounded bg-sky-500/20 text-sky-400 flex items-center justify-center">
+              <History className="w-3.5 h-3.5" />
             </div>
-            <div>
-              <h3 className="font-bold text-sm text-neutral-100">버전 기록</h3>
-              <p className="text-[10px] text-neutral-400">시점 저장 및 되돌리기</p>
+            <div className="flex items-center gap-1.5">
+              <h3 className="font-extrabold text-xs tracking-wider uppercase text-neutral-100">
+                버전 히스토리
+              </h3>
+              <span className="text-[10px] text-neutral-400 font-normal">
+                ({versions.length})
+              </span>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+            className="p-1 text-neutral-400 hover:text-white rounded hover:bg-white/10 transition-colors"
+            title="닫기"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* Diff Copied Toast Feedback */}
+        {diffFeedback && (
+          <div className="bg-[#1b5e20] text-white px-3.5 py-2 flex items-center justify-between text-[11px] font-medium animate-in fade-in slide-in-from-top-1 duration-150 shrink-0 select-text">
+            <span className="flex items-center gap-1.5 min-w-0 pr-2">
+              <Check className="w-3.5 h-3.5 shrink-0 text-emerald-300" />
+              <span className="truncate">{diffFeedback}</span>
+            </span>
+            <button onClick={() => setDiffFeedback(null)} className="text-white/80 hover:text-white shrink-0">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
         {/* Action: Create New Version */}
-        <div className="p-3.5 border-b border-white/[0.08] bg-white/[0.02]">
+        <div className="p-3 border-b border-white/[0.08] bg-[#222222]">
           {!isCreating ? (
             <button
               onClick={() => setIsCreating(true)}
-              className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-lg transition-all"
+              className="w-full py-1.5 px-3 rounded-[2px] bg-[#1b5e20] hover:bg-[#257d2c] text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" />
-              현재 시점 저장하기
+              현재 시점 스냅샷 저장
             </button>
           ) : (
-            <form onSubmit={handleSave} className="flex flex-col gap-2 bg-[#202024] p-3 rounded-lg border border-white/15">
+            <form onSubmit={handleSave} className="flex flex-col gap-2 bg-[#1c1c1c] p-2.5 rounded-[2px] border border-white/15">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-[11px] text-emerald-400 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> 새 버전 이름 지정
+                <span className="font-medium text-[11px] text-white flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-amber-400" /> 스냅샷 이름 지정
                 </span>
                 <span className="text-[10px] text-neutral-400">
                   테이블 {currentTableCount}개 · 관계 {currentRelationshipCount}개
@@ -115,30 +165,30 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
               <input
                 type="text"
                 autoFocus
-                placeholder="예: 결제 모듈 ERD 추가 완료"
+                placeholder="예: 결제 모듈 추가 전 백업"
                 value={versionName}
                 onChange={(e) => setVersionName(e.target.value)}
-                className="bg-black/40 text-white px-2.5 py-1.5 rounded border border-white/20 focus:border-emerald-500 outline-none text-xs"
+                className="bg-[#141414] text-white px-2.5 py-1 rounded-[2px] border border-white/20 focus:border-[#38bdf8] outline-none text-xs"
               />
               <input
                 type="text"
                 placeholder="설명 또는 메모 (선택)"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                className="bg-black/30 text-neutral-300 px-2.5 py-1 rounded border border-white/10 focus:border-emerald-500 outline-none text-[11px]"
+                className="bg-[#141414] text-neutral-300 px-2.5 py-1 rounded-[2px] border border-white/10 focus:border-[#38bdf8] outline-none text-[11px]"
               />
               <div className="flex items-center justify-end gap-1.5 mt-1">
                 <button
                   type="button"
                   onClick={() => setIsCreating(false)}
-                  className="px-2.5 py-1 rounded text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+                  className="px-2.5 py-1 rounded-[2px] text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
                 >
                   취소
                 </button>
                 <button
                   type="submit"
                   disabled={!versionName.trim()}
-                  className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold transition-colors"
+                  className="px-3 py-1 rounded-[2px] bg-[#1b5e20] hover:bg-[#257d2c] disabled:opacity-50 text-white font-medium transition-colors"
                 >
                   저장
                 </button>
@@ -212,14 +262,33 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    {/* Copy Schema Diff for AI */}
+                    <button
+                      onClick={() => handleCopyDiff(ver)}
+                      className="px-2 py-1 rounded-[2px] bg-[#333] hover:bg-[#3d3d3d] text-amber-300 hover:text-amber-200 border border-amber-400/30 font-medium text-[10.5px] flex items-center gap-1 transition-all"
+                      title="이 버전 대비 현재 스키마의 변경점(Diff)을 AI 프롬프트로 복사"
+                    >
+                      {diffCopiedVersionId === ver.id ? (
+                        <>
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>복사됨!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3 text-amber-400" />
+                          <span>Diff 복사</span>
+                        </>
+                      )}
+                    </button>
+
                     {/* Restore Button */}
                     <button
                       onClick={() => setPendingRestoreVersion(ver)}
-                      className="px-2 py-1 rounded bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 font-semibold text-[10.5px] flex items-center gap-1 transition-all"
+                      className="px-2 py-1 rounded-[2px] bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 font-medium text-[10.5px] flex items-center gap-1 transition-all"
                       title="이 시점으로 ERD 캔버스 복원"
                     >
                       <RotateCcw className="w-3 h-3" />
-                      이 버전으로 되돌리기
+                      되돌리기
                     </button>
 
                     {/* Delete Button */}

@@ -16,6 +16,35 @@ export const DEFAULT_MOCK_USER: UserProfile = {
   updated_at: new Date().toISOString(),
 };
 
+export const DEFAULT_PROJECTS: Project[] = [
+  {
+    id: 'e1000000-0000-4000-8000-000000000001',
+    owner_id: 'usr_dev_1001',
+    name: 'E-Commerce Main DB',
+    description: '글로벌 커머스 주문·결제·재고 통합 ERD 모델',
+    target_dialect: 'mssql',
+    room_id: 'room-ecommerce-01',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+    updated_at: new Date().toISOString(),
+    my_role: 'owner',
+    member_count: 3,
+  },
+  {
+    id: 'e2000000-0000-4000-8000-000000000002',
+    owner_id: 'usr_other_9999',
+    name: 'SSO & IAM Platform',
+    description: '사내 통합 인증 및 RBAC 권한 관리 데이터 모델',
+    target_dialect: 'postgres',
+    room_id: 'room-auth-service-02',
+    status: 'active',
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
+    my_role: 'editor',
+    member_count: 2,
+  },
+];
+
 // LocalStorage Helper
 function getStored<T>(key: string, defaultVal: T): T {
   if (typeof window === 'undefined') return defaultVal;
@@ -39,7 +68,7 @@ function setStored<T>(key: string, val: T): void {
 export const mockStore = {
   // Current User
   getCurrentUser(): UserProfile | null {
-    return getStored<UserProfile | null>(MOCK_USER_STORAGE_KEY, null);
+    return getStored<UserProfile | null>(MOCK_USER_STORAGE_KEY, DEFAULT_MOCK_USER);
   },
 
   setCurrentUser(user: UserProfile | null) {
@@ -48,36 +77,7 @@ export const mockStore = {
 
   // Projects
   getProjects(userId: string): Project[] {
-    const defaultProjects: Project[] = [
-      {
-        id: 'proj-e-commerce-2026',
-        owner_id: userId,
-        name: 'E-Commerce Main DB',
-        description: '글로벌 커머스 주문·결제·재고 통합 ERD 모델',
-        target_dialect: 'mssql',
-        room_id: 'room-ecommerce-01',
-        status: 'active',
-        created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-        updated_at: new Date().toISOString(),
-        my_role: 'owner',
-        member_count: 3,
-      },
-      {
-        id: 'proj-auth-service',
-        owner_id: 'usr_other_9999',
-        name: 'SSO & IAM Platform',
-        description: '사내 통합 인증 및 RBAC 권한 관리 데이터 모델',
-        target_dialect: 'postgres',
-        room_id: 'room-auth-service-02',
-        status: 'active',
-        created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-        updated_at: new Date(Date.now() - 86400000).toISOString(),
-        my_role: 'editor',
-        member_count: 2,
-      },
-    ];
-
-    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, defaultProjects);
+    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, DEFAULT_PROJECTS);
     const allMembers = getStored<ProjectMember[]>(MOCK_MEMBERS_STORAGE_KEY, []);
 
     // Filter projects where user is owner OR member
@@ -102,9 +102,10 @@ export const mockStore = {
   },
 
   createProject(userId: string, name: string, description: string, dialect: any): Project {
-    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, []);
+    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, DEFAULT_PROJECTS);
+    const projId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'f' + Math.random().toString(16).substring(2, 9) + '-0000-4000-8000-000000000000';
     const newProj: Project = {
-      id: 'proj-' + Math.random().toString(36).substring(2, 9),
+      id: projId,
       owner_id: userId,
       name,
       description,
@@ -127,14 +128,34 @@ export const mockStore = {
   deleteProject(projectId: string): void {
     const user = this.getCurrentUser();
     if (!user) return;
-    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, []);
+    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, DEFAULT_PROJECTS);
     const projects = allProjects.filter((p) => p.id !== projectId);
     setStored(MOCK_PROJECTS_STORAGE_KEY, projects);
   },
 
   getProjectById(projectId: string): Project | null {
-    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, []);
-    return allProjects.find((p) => p.id === projectId) || null;
+    const allProjects = getStored<Project[]>(MOCK_PROJECTS_STORAGE_KEY, DEFAULT_PROJECTS);
+    let found = allProjects.find((p) => p.id === projectId);
+    if (!found) {
+      // 자동 생성 fallback (무한 로딩 방지)
+      const currentUser = this.getCurrentUser() || DEFAULT_MOCK_USER;
+      found = {
+        id: projectId,
+        owner_id: currentUser.id,
+        name: '새 ERD 프로젝트',
+        description: '로컬 개발 워크스페이스',
+        target_dialect: 'mysql',
+        room_id: `room-${projectId}`,
+        status: 'active',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        my_role: 'owner',
+        member_count: 1,
+      };
+      setStored(MOCK_PROJECTS_STORAGE_KEY, [found, ...allProjects]);
+      this.addMember(found.id, currentUser.id, 'owner', null);
+    }
+    return found;
   },
 
   // Members

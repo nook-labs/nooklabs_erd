@@ -2,18 +2,18 @@
 
 @layer base {
   :root {
-    --bg-main: #07090e;
-    --bg-surface: #0d111a;
-    --bg-surface-elevated: #131926;
-    --border-subtle: rgba(255, 255, 255, 0.07);
-    --border-strong: rgba(255, 255, 255, 0.14);
-    --accent-primary: #4f46e5;
-    --accent-glow: rgba(79, 70, 229, 0.25);
+    --bg-main: #18191c;
+    --bg-surface: #222428;
+    --bg-surface-elevated: #282a2e;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --accent-primary: #1b5e20;
+    --accent-glow: rgba(27, 94, 32, 0.2);
   }
 
   body {
     background-color: var(--bg-main);
-    color: #f1f5f9;
+    color: #e2e8f0;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -90,16 +90,14 @@
 }
 
 .react-flow__viewport {
-  transform-style: flat !important;
-  backface-visibility: hidden !important;
+  transform-origin: 0 0;
 }
 
 /* Crisp Text Rendering on Canvas Zoom */
 .react-flow__node {
-  transform: translateZ(0);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  text-rendering: geometricPrecision;
+  text-rendering: optimizeLegibility;
 }
 
 /* Figma Style Selection Box */
@@ -140,10 +138,17 @@
 }
 
 .react-flow__minimap {
-  background-color: #0d111a !important;
-  border: 1px solid rgba(255, 255, 255, 0.08) !important;
-  border-radius: 8px !important;
+  background-color: #222222 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 4px !important;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ERDCloud Signature Red Viewport Bounding Box */
+.react-flow__minimap-mask {
+  stroke: #ef4444 !important;
+  stroke-width: 2px !important;
+  fill: rgba(0, 0, 0, 0.4) !important;
 }
 
 .react-flow__edge-path {

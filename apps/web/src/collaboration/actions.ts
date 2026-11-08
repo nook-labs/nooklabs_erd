@@ -37,7 +37,7 @@ export function addTableAction(
   physicalName: string = 'new_table',
   x: number = 200,
   y: number = 200,
-  headerColor: string = '#4f46e5',
+  headerColor: string = '#1b5e20',
   pageId?: string
 ): string {
   const tableId = `tbl_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;

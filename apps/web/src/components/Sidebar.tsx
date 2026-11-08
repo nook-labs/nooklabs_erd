@@ -1,20 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
-import { ActiveTool } from '@/types/erd';
+import React from 'react';
+import { ActiveTool, DisplayMode } from '@/types/erd';
 import {
   MousePointer2,
   Table2,
   FileText,
   Workflow,
-  ZoomIn,
-  ZoomOut,
+  Plus,
+  Minus,
   Maximize2,
-  ListTree,
-  ChevronLeft,
-  ChevronRight,
-  PanelLeftClose,
-  PanelLeft,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,100 +19,13 @@ interface SidebarProps {
   setIsIdentifyingMode: (identifying: boolean) => void;
   onAddTable: () => void;
   onAddMemo: () => void;
-  onAddDiagram?: () => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFitView: () => void;
-  onToggleEntityList?: () => void;
-  isEntityListOpen?: boolean;
-  onToggleDiagramList?: () => void;
-  isDiagramListOpen?: boolean;
+  displayMode?: DisplayMode;
+  setDisplayMode?: (mode: DisplayMode) => void;
   isViewerMode?: boolean;
 }
-
-// 7 Types of Crow's Foot Icons with Figma Clean Precision
-const ERD_REL_TOOLS: {
-  tool: ActiveTool;
-  title: string;
-  svg: React.ReactNode;
-}[] = [
-  {
-    tool: 'rel-optional-one-many',
-    title: 'Optional 1+many (없거나 1개 또는 여러개)',
-    svg: (
-      <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="1" y1="12" x2="14" y2="12" strokeWidth="1.6" />
-        <circle cx="5" cy="12" r="2.5" strokeWidth="1.6" fill="#1e1e1e" />
-        <line x1="10" y1="5" x2="10" y2="19" strokeWidth="1.6" strokeLinecap="round" />
-        <path d="M 14 12 L 23 5 M 14 12 L 23 19 M 14 12 L 23 12" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    tool: 'rel-optional-many',
-    title: 'Optional many (없거나 여러개)',
-    svg: (
-      <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="1" y1="12" x2="14" y2="12" strokeWidth="1.6" />
-        <circle cx="7" cy="12" r="2.8" strokeWidth="1.6" fill="#1e1e1e" />
-        <path d="M 14 12 L 23 5 M 14 12 L 23 19 M 14 12 L 23 12" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    tool: 'rel-optional-one',
-    title: 'Optional one (없거나 한개)',
-    svg: (
-      <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="1" y1="12" x2="23" y2="12" strokeWidth="1.6" />
-        <circle cx="7" cy="12" r="2.8" strokeWidth="1.6" fill="#1e1e1e" />
-        <line x1="17" y1="5" x2="17" y2="19" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    tool: 'rel-mandatory-many',
-    title: 'Mandatory many (1개 또는 여러개)',
-    svg: (
-      <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="1" y1="12" x2="14" y2="12" strokeWidth="1.6" />
-        <line x1="8" y1="5" x2="8" y2="19" strokeWidth="1.6" strokeLinecap="round" />
-        <path d="M 14 12 L 23 5 M 14 12 L 23 19 M 14 12 L 23 12" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    tool: 'rel-mandatory-one',
-    title: 'Mandatory one (무조건 1개)',
-    svg: (
-      <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="1" y1="12" x2="23" y2="12" strokeWidth="1.6" />
-        <line x1="9" y1="5" x2="9" y2="19" strokeWidth="1.6" strokeLinecap="round" />
-        <line x1="17" y1="5" x2="17" y2="19" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    tool: 'rel-many',
-    title: 'Many (여러개)',
-    svg: (
-      <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="1" y1="12" x2="13" y2="12" strokeWidth="1.6" />
-        <path d="M 13 12 L 23 5 M 13 12 L 23 19 M 13 12 L 23 12" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
-    tool: 'rel-one',
-    title: 'One (한개)',
-    svg: (
-      <svg className="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <line x1="1" y1="12" x2="23" y2="12" strokeWidth="1.6" />
-        <line x1="14" y1="5" x2="14" y2="19" strokeWidth="1.6" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-];
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTool,
@@ -126,191 +34,241 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setIsIdentifyingMode,
   onAddTable,
   onAddMemo,
-  onAddDiagram,
   onZoomIn,
   onZoomOut,
   onFitView,
-  onToggleEntityList,
-  isEntityListOpen = false,
-  onToggleDiagramList,
-  isDiagramListOpen = false,
+  displayMode = 'physical',
+  setDisplayMode,
   isViewerMode = false,
 }) => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-
-  // If collapsed, show minimal floating restore button
-  if (isCollapsed) {
-    return (
-      <div className={`absolute top-2 left-2 z-40 ${isViewerMode ? 'hidden sm:block' : ''}`}>
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="p-1.5 bg-[#2c2c2c]/90 hover:bg-[#383838] border border-white/20 rounded-md shadow-xl text-neutral-300 hover:text-white transition-all backdrop-blur-md active:scale-95 flex items-center gap-1 text-[11px] font-medium"
-          title="도구 사이드바 펼치기"
-        >
-          <PanelLeft className="w-4 h-4 text-emerald-400" />
-          <span className="hidden sm:inline">도구함</span>
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <aside
-      className={`w-8 sm:w-8.5 bg-[#2c2c2c] border-r border-white/[0.08] flex flex-col items-center py-1 gap-0.5 z-30 select-none overflow-y-auto shrink-0 transition-all ${
-        isViewerMode ? 'hidden sm:flex' : ''
-      }`}
-    >
-      {/* 0. Collapse Sidebar Button */}
+    <aside className="w-[30px] bg-[#2a2a2a] border-r border-[#1e1e1e] flex flex-col items-center py-1 gap-1 z-30 select-none shrink-0 font-sans">
+      {/* 1. Pointer (Select) */}
       <button
-        onClick={() => setIsCollapsed(true)}
-        className="w-6.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08] transition-colors mb-0.5"
-        title="사이드바 접기 (화면 넓게 보기)"
+        onClick={() => setActiveTool('select')}
+        className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+          activeTool === 'select'
+            ? 'bg-[#1b5e20] text-white shadow-sm'
+            : 'text-neutral-400 hover:text-white hover:bg-white/10'
+        }`}
+        title="선택 툴 (V)"
       >
-        <PanelLeftClose className="w-3 h-3" />
+        <MousePointer2 className="w-3.5 h-3.5" />
       </button>
 
-      <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
-
-      {/* 뷰어 모드가 아닐 때만 편집 도구들 표시 */}
+      {/* 2. Add Table */}
       {!isViewerMode && (
-        <>
-          {/* 1. Select Tool */}
-          <button
-            onClick={() => setActiveTool('select')}
-            className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
-              activeTool === 'select'
-                ? 'bg-[#0c8ce9] text-white shadow-sm'
-                : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-            }`}
-            title="선택 / 이동 (V)"
-          >
-            <MousePointer2 className="w-3 h-3" />
-          </button>
-
-          {/* 2. Add Table */}
-          <button
-            onClick={onAddTable}
-            className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-            title="테이블 추가 (Shift + T)"
-          >
-            <Table2 className="w-3 h-3 text-emerald-400" />
-          </button>
-        </>
-      )}
-
-      {/* 2.5 Entity List Toggle (뷰어 모드에서도 유용) */}
-      {onToggleEntityList && (
         <button
-          onClick={onToggleEntityList}
-          className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
-            isEntityListOpen
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-          }`}
-          title="엔티티 목록 (ENTITY)"
+          onClick={onAddTable}
+          className="w-6 h-6 flex items-center justify-center rounded-[2px] text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+          title="테이블 추가"
         >
-          <ListTree className="w-3 h-3" />
+          <Table2 className="w-3.5 h-3.5 text-emerald-400" />
         </button>
       )}
 
-      {/* 2.6 Diagram List Toggle */}
-      {onToggleDiagramList && (
-        <button
-          onClick={onToggleDiagramList}
-          className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
-            isDiagramListOpen
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-          }`}
-          title="다이어그램 목록 (Mermaid)"
-        >
-          <Workflow className="w-3 h-3 text-indigo-400" />
-        </button>
-      )}
-
-      {/* 뷰어 모드가 아닐 때만 메모, 다이어그램, 관계선 도구들 표시 */}
+      {/* 3. Add Memo */}
       {!isViewerMode && (
-        <>
-          {/* 3. Add Memo Tool */}
-          <button
-            onClick={() => setActiveTool(activeTool === 'memo' ? 'select' : 'memo')}
-            className={`w-6.5 h-6.5 flex items-center justify-center rounded active:scale-95 transition-all relative ${
-              activeTool === 'memo'
-                ? 'bg-amber-500 text-black font-bold shadow-md ring-1 ring-amber-300'
-                : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-            }`}
-            title={activeTool === 'memo' ? '메모지 스탬프 모드 활성화됨' : '메모지 생성 (단축키: Shift + M)'}
-          >
-            <FileText className={`w-3 h-3 ${activeTool === 'memo' ? 'text-black' : 'text-amber-400'}`} />
-            {activeTool === 'memo' && (
-              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-400 rounded-full animate-ping" />
-            )}
-          </button>
-
-          {/* 3.5. Add Diagram */}
-          {onAddDiagram && (
-            <button
-              onClick={onAddDiagram}
-              className="w-6.5 h-6.5 flex items-center justify-center rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all"
-              title="Mermaid 다이어그램 추가 (단축키: Shift + D)"
-            >
-              <Workflow className="w-3 h-3 text-indigo-400" />
-            </button>
-          )}
-
-          {/* Divider */}
-          <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
-
-          {/* 4~10: All 7 Crow's Foot Relationship Tools */}
-          {ERD_REL_TOOLS.map((item, idx) => {
-            const isSelected = activeTool === item.tool;
-            return (
-              <button
-                key={item.tool}
-                onClick={() => setActiveTool(isSelected ? 'select' : item.tool)}
-                className={`w-6.5 h-6.5 flex items-center justify-center rounded transition-all ${
-                  isSelected
-                    ? 'bg-[#0c8ce9] text-white shadow-sm'
-                    : 'text-neutral-300 hover:text-white hover:bg-white/[0.08]'
-                }`}
-                title={`${idx + 1}. ${item.title}`}
-              >
-                {item.svg}
-              </button>
-            );
-          })}
-
-          <div className="w-4 h-[1px] bg-white/[0.1] my-0.2" />
-        </>
+        <button
+          onClick={() => setActiveTool(activeTool === 'memo' ? 'select' : 'memo')}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+            activeTool === 'memo'
+              ? 'bg-[#f59e0b] text-black font-bold'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="메모 추가 (Shift+M)"
+        >
+          <FileText className="w-3.5 h-3.5" />
+        </button>
       )}
 
-      {/* Zoom Controls at Bottom (확대 / 축소 / 화면 맞춤) */}
-      <div className="flex flex-col items-center gap-0.5 mt-auto pt-1">
+      {/* 3-2. Add Sequence/Mermaid Diagram Node */}
+      {!isViewerMode && (
         <button
-          onClick={onZoomIn}
-          className="w-5.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
-          title="확대 (+)"
+          onClick={() => setActiveTool(activeTool === 'diagram' ? 'select' : 'diagram')}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+            activeTool === 'diagram'
+              ? 'bg-[#0284c7] text-white font-bold'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="시퀀스 다이어그램 추가 (Shift+D)"
         >
-          <ZoomIn className="w-2.5 h-2.5" />
+          <Workflow className="w-3.5 h-3.5 text-sky-400" />
         </button>
+      )}
 
-        <button
-          onClick={onZoomOut}
-          className="w-5.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
-          title="축소 (-)"
-        >
-          <ZoomOut className="w-2.5 h-2.5" />
-        </button>
+      <div className="w-4 h-[1px] bg-white/10 my-0.5" />
 
+      {/* 4. 1:1 Identifying (실선) */}
+      {!isViewerMode && (
         <button
-          onClick={onFitView}
-          className="w-5.5 h-5.5 flex items-center justify-center rounded text-neutral-400 hover:text-white hover:bg-white/[0.08]"
-          title="화면 맞춤"
+          onClick={() => {
+            setIsIdentifyingMode(true);
+            setActiveTool('rel-one');
+          }}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+            activeTool === 'rel-one' && isIdentifyingMode
+              ? 'bg-[#1b5e20] text-white'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="1:1 식별 관계 (실선)"
         >
-          <Maximize2 className="w-2.5 h-2.5" />
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="2" y1="12" x2="22" y2="12" strokeWidth="2" />
+            <line x1="6" y1="6" x2="6" y2="18" strokeWidth="2" />
+            <line x1="18" y1="6" x2="18" y2="18" strokeWidth="2" />
+          </svg>
         </button>
-      </div>
+      )}
+
+      {/* 5. 1:N Identifying (실선 까마귀발) */}
+      {!isViewerMode && (
+        <button
+          onClick={() => {
+            setIsIdentifyingMode(true);
+            setActiveTool('rel-mandatory-many');
+          }}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+            activeTool === 'rel-mandatory-many' && isIdentifyingMode
+              ? 'bg-[#1b5e20] text-white'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="1:N 식별 관계 (실선)"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="2" y1="12" x2="14" y2="12" strokeWidth="2" />
+            <line x1="6" y1="6" x2="6" y2="18" strokeWidth="2" />
+            <path d="M 14 12 L 22 6 M 14 12 L 22 18 M 14 12 L 22 12" strokeWidth="2" />
+          </svg>
+        </button>
+      )}
+
+      {/* 6. 1:1 Non-Identifying (점선) */}
+      {!isViewerMode && (
+        <button
+          onClick={() => {
+            setIsIdentifyingMode(false);
+            setActiveTool('rel-optional-one');
+          }}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+            activeTool === 'rel-optional-one' && !isIdentifyingMode
+              ? 'bg-[#1b5e20] text-white'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="1:1 비식별 관계 (점선)"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="2" y1="12" x2="22" y2="12" strokeWidth="2" strokeDasharray="3 3" />
+            <line x1="6" y1="6" x2="6" y2="18" strokeWidth="2" />
+            <line x1="18" y1="6" x2="18" y2="18" strokeWidth="2" />
+          </svg>
+        </button>
+      )}
+
+      {/* 7. 1:N Non-Identifying (점선 까마귀발) */}
+      {!isViewerMode && (
+        <button
+          onClick={() => {
+            setIsIdentifyingMode(false);
+            setActiveTool('rel-optional-many');
+          }}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+            activeTool === 'rel-optional-many' && !isIdentifyingMode
+              ? 'bg-[#1b5e20] text-white'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="1:N 비식별 관계 (점선)"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="2" y1="12" x2="14" y2="12" strokeWidth="2" strokeDasharray="3 3" />
+            <circle cx="6" cy="12" r="2.5" strokeWidth="1.5" />
+            <path d="M 14 12 L 22 6 M 14 12 L 22 18 M 14 12 L 22 12" strokeWidth="2" />
+          </svg>
+        </button>
+      )}
+
+      {/* 8. N:M Non-Identifying (양쪽 까마귀발) */}
+      {!isViewerMode && (
+        <button
+          onClick={() => {
+            setIsIdentifyingMode(false);
+            setActiveTool('rel-many');
+          }}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] transition-colors ${
+            activeTool === 'rel-many'
+              ? 'bg-[#1b5e20] text-white'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="N:M 다대다 관계"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="8" y1="12" x2="16" y2="12" strokeWidth="2" strokeDasharray="3 3" />
+            <path d="M 8 12 L 2 6 M 8 12 L 2 18" strokeWidth="2" />
+            <path d="M 16 12 L 22 6 M 16 12 L 22 18" strokeWidth="2" />
+          </svg>
+        </button>
+      )}
+
+      <div className="w-4 h-[1px] bg-white/10 my-0.5" />
+
+      {/* 9. Zoom In */}
+      <button
+        onClick={onZoomIn}
+        className="w-6 h-6 flex items-center justify-center rounded-[2px] text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+        title="확대 (+)"
+      >
+        <Plus className="w-3.5 h-3.5" />
+      </button>
+
+      {/* 10. Zoom Out */}
+      <button
+        onClick={onZoomOut}
+        className="w-6 h-6 flex items-center justify-center rounded-[2px] text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+        title="축소 (-)"
+      >
+        <Minus className="w-3.5 h-3.5" />
+      </button>
+
+      {/* 11. Fit View */}
+      <button
+        onClick={onFitView}
+        className="w-6 h-6 flex items-center justify-center rounded-[2px] text-neutral-400 hover:text-white hover:bg-white/10 transition-colors"
+        title="화면 맞춤 (Fit View)"
+      >
+        <Maximize2 className="w-3.5 h-3.5" />
+      </button>
+
+      <div className="w-4 h-[1px] bg-white/10 my-0.5" />
+
+      {/* 12. Logical (L) */}
+      {setDisplayMode && (
+        <button
+          onClick={() => setDisplayMode('logical')}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] font-black text-xs transition-colors ${
+            displayMode === 'logical'
+              ? 'bg-[#1b5e20] text-white shadow-sm'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="논리 뷰 (Logical)"
+        >
+          L
+        </button>
+      )}
+
+      {/* 13. Physical (P) */}
+      {setDisplayMode && (
+        <button
+          onClick={() => setDisplayMode('physical')}
+          className={`w-6 h-6 flex items-center justify-center rounded-[2px] font-black text-xs transition-colors ${
+            displayMode === 'physical'
+              ? 'bg-[#1b5e20] text-white shadow-sm'
+              : 'text-neutral-400 hover:text-white hover:bg-white/10'
+          }`}
+          title="물리 뷰 (Physical)"
+        >
+          P
+        </button>
+      )}
     </aside>
   );
 };
-

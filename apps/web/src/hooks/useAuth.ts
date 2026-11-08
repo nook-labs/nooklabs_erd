@@ -23,7 +23,9 @@ export function useAuth() {
             updated_at: session.user.updated_at || session.user.created_at,
           });
         } else {
-          setUser(null);
+          // Fallback to local dev mock user so dev server works immediately
+          const mockUser = mockStore.getCurrentUser() || DEFAULT_MOCK_USER;
+          setUser(mockUser);
         }
         setLoading(false);
       });
@@ -39,7 +41,9 @@ export function useAuth() {
             updated_at: session.user.updated_at || session.user.created_at,
           });
         } else {
-          setUser(null);
+          // Fallback to local dev mock user so dev server works immediately
+          const mockUser = mockStore.getCurrentUser() || DEFAULT_MOCK_USER;
+          setUser(mockUser);
         }
         setLoading(false);
       });

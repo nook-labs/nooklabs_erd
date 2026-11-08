@@ -431,16 +431,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-16 sm:pt-24 px-4 animate-in fade-in duration-150 select-none"
+      className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-16 sm:pt-24 px-4 select-none"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-[#1e1e1e] border border-white/[0.15] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-150 text-white"
+        className="w-full max-w-2xl bg-[#222428] border border-white/10 rounded-[4px] shadow-2xl overflow-hidden flex flex-col max-h-[80vh] text-white"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header Input */}
-        <div className="p-3.5 border-b border-white/[0.08] bg-[#252525] flex items-center gap-3">
-          <Search className="w-5 h-5 text-emerald-400 shrink-0" />
+        <div className="p-3 border-b border-white/10 bg-[#1a1b1e] flex items-center gap-2.5">
+          <Search className="w-4 h-4 text-emerald-400 shrink-0" />
           <input
             ref={inputRef}
             type="text"
@@ -448,17 +448,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent text-sm text-white placeholder:text-neutral-400 outline-none font-medium"
+            className="flex-1 bg-transparent text-xs text-white placeholder:text-neutral-500 outline-none font-medium"
           />
           {query && (
             <button
               onClick={() => setQuery('')}
               className="p-1 text-neutral-400 hover:text-white rounded"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
-          <kbd className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded bg-black/40 border border-white/20 font-mono text-neutral-400">
+          <kbd className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded-[2px] bg-black/40 border border-white/10 font-mono text-neutral-400">
             ESC
           </kbd>
         </div>

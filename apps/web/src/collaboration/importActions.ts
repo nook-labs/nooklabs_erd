@@ -107,13 +107,37 @@ function normalizeTable(rawTable: any, tableId: string): TableModel {
 /**
  * Normalizes relationships to ensure validity
  */
-function normalizeRelationship(rawRel: any, relId: string): RelationshipModel {
+/**
+ * Normalizes relationships to ensure validity, with smart physicalName lookup for AI-generated JSON
+ */
+function normalizeRelationship(
+  rawRel: any,
+  relId: string,
+  tableMap?: Record<string, TableModel>
+): RelationshipModel {
+  let parentId = rawRel.parentTableId || rawRel.parentTable || rawRel.parent;
+  let childId = rawRel.childTableId || rawRel.childTable || rawRel.child;
+
+  // If AI provided physical table names instead of IDs (e.g. parentTable: "users", childTable: "orders")
+  if (tableMap) {
+    const tableList = Object.values(tableMap);
+    const foundParent = tableList.find(
+      (t) => t.id === parentId || t.physicalName === parentId || t.logicalName === parentId
+    );
+    if (foundParent) parentId = foundParent.id;
+
+    const foundChild = tableList.find(
+      (t) => t.id === childId || t.physicalName === childId || t.logicalName === childId
+    );
+    if (foundChild) childId = foundChild.id;
+  }
+
   return {
     id: rawRel.id || relId,
-    parentTableId: rawRel.parentTableId,
-    childTableId: rawRel.childTableId,
+    parentTableId: parentId || '',
+    childTableId: childId || '',
     columnMappings: Array.isArray(rawRel.columnMappings) ? rawRel.columnMappings : [],
-    relationshipType: rawRel.relationshipType || 'non-identifying',
+    relationshipType: rawRel.relationshipType === 'identifying' ? 'identifying' : 'non-identifying',
     cardinality: rawRel.cardinality || 'one-to-many',
     sourceMultiplicity: rawRel.sourceMultiplicity || 'one',
     targetMultiplicity: rawRel.targetMultiplicity || 'optional-many',
@@ -124,10 +148,49 @@ function normalizeRelationship(rawRel: any, relId: string): RelationshipModel {
 }
 
 /**
- * Parses raw JSON text and normalizes into ImportParsedResult with robust fallback
+ * Strips markdown code blocks and extracts outermost JSON structure from AI response text
+ */
+function extractJsonFromText(rawText: string): string {
+  let cleaned = rawText.trim();
+
+  // 1. If wrapped in markdown code fence (```json ... ``` or ``` ...)
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    cleaned = codeBlockMatch[1].trim();
+  }
+
+  // 2. Find outermost JSON boundaries ({...} or [...])
+  const firstBrace = cleaned.indexOf('{');
+  const firstBracket = cleaned.indexOf('[');
+
+  let startIndex = -1;
+  let isObject = false;
+
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    startIndex = firstBrace;
+    isObject = true;
+  } else if (firstBracket !== -1) {
+    startIndex = firstBracket;
+    isObject = false;
+  }
+
+  if (startIndex !== -1) {
+    const lastChar = isObject ? '}' : ']';
+    const endIndex = cleaned.lastIndexOf(lastChar);
+    if (endIndex !== -1 && endIndex > startIndex) {
+      cleaned = cleaned.substring(startIndex, endIndex + 1);
+    }
+  }
+
+  return cleaned;
+}
+
+/**
+ * Parses raw JSON text and normalizes into ImportParsedResult with robust fallback for AI JSON
  */
 export function parseImportJSON(jsonString: string): ImportParsedResult {
-  const parsed = JSON.parse(jsonString);
+  const cleanedText = extractJsonFromText(jsonString);
+  const parsed = JSON.parse(cleanedText);
 
   const result: ImportParsedResult = {
     tables: {},
@@ -149,19 +212,35 @@ export function parseImportJSON(jsonString: string): ImportParsedResult {
 
     if (parsed.relationshipsById && typeof parsed.relationshipsById === 'object') {
       Object.entries(parsed.relationshipsById).forEach(([relId, rel]: [string, any]) => {
-        result.relationships[relId] = normalizeRelationship(rel, relId);
+        result.relationships[relId] = normalizeRelationship(rel, relId, result.tables);
       });
     }
   }
-  // Format 2: ERDSnapshot format ({ tables, relationships, nodes, memos, domains })
-  else if (parsed.tables && typeof parsed.tables === 'object') {
-    Object.entries(parsed.tables).forEach(([tblId, tbl]: [string, any]) => {
-      result.tables[tblId] = normalizeTable(tbl, tblId);
-    });
+  // Format 2: ERDSnapshot / AI friendly format ({ tables, relationships, nodes, memos, domains })
+  else if (parsed.tables) {
+    // 2-A. tables as Array (AI favorite format: { tables: [ ... ] })
+    if (Array.isArray(parsed.tables)) {
+      parsed.tables.forEach((tbl: any, idx: number) => {
+        const tblId = tbl.id || `tbl_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
+        result.tables[tblId] = normalizeTable(tbl, tblId);
+      });
+    }
+    // 2-B. tables as Object Record ({ tbl_1: { ... } })
+    else if (typeof parsed.tables === 'object') {
+      Object.entries(parsed.tables).forEach(([tblId, tbl]: [string, any]) => {
+        result.tables[tblId] = normalizeTable(tbl, tblId);
+      });
+    }
 
-    if (parsed.relationships && typeof parsed.relationships === 'object') {
+    // Relationships (supports Array or Object)
+    if (Array.isArray(parsed.relationships)) {
+      parsed.relationships.forEach((rel: any, idx: number) => {
+        const relId = rel.id || `rel_${Date.now()}_${idx}`;
+        result.relationships[relId] = normalizeRelationship(rel, relId, result.tables);
+      });
+    } else if (parsed.relationships && typeof parsed.relationships === 'object') {
       Object.entries(parsed.relationships).forEach(([relId, rel]: [string, any]) => {
-        result.relationships[relId] = normalizeRelationship(rel, relId);
+        result.relationships[relId] = normalizeRelationship(rel, relId, result.tables);
       });
     }
 

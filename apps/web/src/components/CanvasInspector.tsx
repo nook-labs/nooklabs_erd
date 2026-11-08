@@ -25,10 +25,12 @@ export interface CanvasSettings {
   zoomLabelScale?: number; // 기본값 1.45
   showZoomLabels?: boolean; // 기본값 true
   relationDisplayMode?: RelationDisplayMode; // 기본값 'all' ('all' | 'focused' | 'hidden')
+  dimUnfocused?: boolean; // 비포커스 노드 흐림 처리
 }
 
 
 export const CANVAS_BG_PRESETS = [
+  { name: 'ERDCloud Dark', color: '#262524', darkText: false },
   { name: 'Figma Dark', color: '#1e1e1e', darkText: false },
   { name: 'Figma Slate', color: '#2c2c2c', darkText: false },
   { name: 'Obsidian', color: '#18181b', darkText: false },
@@ -81,35 +83,35 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
   };
 
   return (
-    <aside className="fixed sm:static right-0 top-12 bottom-8 sm:bottom-0 w-72 sm:w-64 bg-[#222222] border-l border-white/[0.08] flex flex-col z-40 text-xs select-none shadow-2xl sm:shadow-none animate-in slide-in-from-right-4 duration-150">
+    <aside className="absolute right-0 top-0 bottom-0 w-72 sm:w-80 bg-[#262626] border-l border-white/[0.1] flex flex-col z-40 text-xs select-none shadow-2xl animate-in slide-in-from-right-4 duration-150">
       {/* Top Tabs (Figma Design / Schema style) */}
-      <div className="h-10 border-b border-white/[0.08] flex items-center justify-between px-3 shrink-0 bg-[#1e1e1e]">
+      <div className="h-11 border-b border-white/[0.08] flex items-center justify-between px-3.5 shrink-0 bg-[#2d2d2d]">
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveTab('design')}
-            className={`px-3 py-1 rounded font-semibold text-xs transition-colors ${
+            className={`px-3 py-1 rounded-[2px] font-semibold text-xs transition-colors ${
               activeTab === 'design'
-                ? 'bg-[#2c2c2c] text-white'
+                ? 'bg-[#1b5e20] text-white'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            디자인 (Page)
+            디자인 (Canvas)
           </button>
           <button
             onClick={() => setActiveTab('schema')}
-            className={`px-3 py-1 rounded font-semibold text-xs transition-colors ${
+            className={`px-3 py-1 rounded-[2px] font-semibold text-xs transition-colors ${
               activeTab === 'schema'
-                ? 'bg-[#2c2c2c] text-white'
+                ? 'bg-[#1b5e20] text-white'
                 : 'text-neutral-400 hover:text-neutral-200'
             }`}
           >
-            스키마 정보
+            프로젝트 정보
           </button>
         </div>
         <button
           onClick={onClose}
           className="p-1 text-neutral-400 hover:text-white rounded hover:bg-white/[0.08] transition-colors"
-          title="인스펙터 닫기"
+          title="닫기"
         >
           <X className="w-3.5 h-3.5" />
         </button>

@@ -96,16 +96,16 @@ export default function ProjectEditorPage() {
   const [projectTitle, setProjectTitle] = useState('프로젝트 ERD');
   const [onlineUsers, setOnlineUsers] = useState<OnlineUserInfo[]>([]);
   const [registeredMemberCount, setRegisteredMemberCount] = useState<number>(1);
-  const [displayMode, setDisplayModeState] = useState<DisplayMode>('both');
+  const [displayMode, setDisplayModeState] = useState<DisplayMode>('physical');
 
-  // Load saved DisplayMode from localStorage on mount (Default: 'both' - 동시 표기)
+  // Load saved DisplayMode from localStorage on mount (Default: 'physical' - ERDCloud 표준)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('nooklabs_display_mode') as DisplayMode;
       if (saved && (saved === 'physical' || saved === 'logical' || saved === 'both')) {
         setDisplayModeState(saved);
       } else {
-        setDisplayModeState('both');
+        setDisplayModeState('physical');
       }
     }
   }, []);
@@ -131,9 +131,9 @@ export default function ProjectEditorPage() {
       }
     }
     return {
-      backgroundColor: '#1e1e1e', // Figma Dark Default
+      backgroundColor: '#262524', // ERDCloud Signature Warm Charcoal Default
       gridType: 'dots',
-      gridColor: 'rgba(255, 255, 255, 0.12)',
+      gridColor: 'rgba(255, 255, 255, 0.08)',
       zoomLabelScale: 1.45,
       showZoomLabels: true,
       relationDisplayMode: 'all',
@@ -603,7 +603,7 @@ export default function ProjectEditorPage() {
         }
       }
 
-      addTableAction(manager, '새 테이블', 'new_table', posX, posY, '#4f46e5', activePageId);
+      addTableAction(manager, '새 테이블', 'new_table', posX, posY, '#1b5e20', activePageId);
     },
     [manager, isReadOnly, activePageId]
   );
@@ -1118,38 +1118,33 @@ export default function ProjectEditorPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-[#121212] text-white overflow-hidden select-none">
-      {/* Top Toolbar */}
+    <div className="flex flex-col h-screen w-screen bg-[#262626] text-white overflow-hidden select-none">
+      {/* ERDCloud Slim Top Toolbar */}
       <Toolbar
         projectTitle={projectTitle}
         onUpdateTitle={handleUpdateTitle}
         displayMode={displayMode}
         setDisplayMode={setDisplayMode}
-        issues={issues}
-        onToggleValidation={() => setIsValidationOpen((prev) => !prev)}
         onUndo={() => manager?.undoManager.undo()}
         onRedo={() => manager?.undoManager.redo()}
         isConnected={isWsConnected}
         saveStatus={saveStatus}
-        userRole={myRole}
-        onOpenShareModal={() => setIsShareModalOpen(true)}
-        memberCount={registeredMemberCount}
-        onToggleInspector={() => setIsInspectorOpen((prev) => !prev)}
+        isViewerMode={isReadOnly || isViewerMode}
+        onToggleViewerMode={() => setIsViewerMode((v) => !v)}
+        onToggleInspector={() => setIsInspectorOpen((v) => !v)}
         isInspectorOpen={isInspectorOpen}
-        onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
-        isEntityListOpen={isEntityListOpen}
-        onToggleVersionHistory={() => setIsVersionHistoryOpen((prev) => !prev)}
-        isVersionHistoryOpen={isVersionHistoryOpen}
-        versionCount={versions.length}
-        tableCount={Object.keys(tables).length}
-        isViewerMode={isViewerMode}
-        onToggleViewerMode={() => setIsViewerMode((prev) => !prev)}
+        onToggleDiagramList={() => setIsDiagramListOpen((v) => !v)}
+        isDiagramListOpen={isDiagramListOpen}
+        onAddDiagram={handleAddDiagram}
         onOpenSearch={() => setIsGlobalSearchOpen(true)}
+        onOpenShareModal={() => setIsShareModalOpen(true)}
+        onOpenExport={() => setIsExportOpen(true)}
+        onOpenImport={() => setIsImportOpen(true)}
       />
 
       {/* Main Workspace Area */}
-      <div className="flex flex-1 relative overflow-hidden">
-        {/* Left Floating Sidebar Tool Palette (뷰어 모드일 때 모바일에서 숨김) */}
+      <div className="flex flex-1 relative overflow-hidden bg-[#262626]">
+        {/* ERDCloud Slim 30px Sidebar */}
         <Sidebar
           activeTool={activeTool}
           setActiveTool={setActiveTool}
@@ -1157,24 +1152,21 @@ export default function ProjectEditorPage() {
           setIsIdentifyingMode={setIsIdentifyingMode}
           onAddTable={() => handleAddTable()}
           onAddMemo={() => handleAddMemo()}
-          onAddDiagram={() => handleAddDiagram()}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onFitView={handleFitView}
-          onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
-          isEntityListOpen={isEntityListOpen}
-          onToggleDiagramList={() => setIsDiagramListOpen((prev) => !prev)}
-          isDiagramListOpen={isDiagramListOpen}
+          displayMode={displayMode}
+          setDisplayMode={setDisplayMode}
           isViewerMode={isReadOnly || isViewerMode}
         />
 
         {/* ERD Canvas Area */}
-        <main className="flex-1 relative h-full w-full bg-[#1e1e1e] overflow-hidden">
+        <main className="flex-1 relative h-full w-full bg-[#262626] overflow-hidden">
           {/* Sync Loading Overlay */}
           {!isSynced && (
-            <div className="absolute inset-0 bg-[#121212]/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center gap-3">
-              <Loader2 className="w-7 h-7 animate-spin text-indigo-400" />
-              <p className="text-xs text-neutral-300 font-medium">실시간 협업 데이터를 동기화하는 중...</p>
+            <div className="absolute inset-0 bg-[#262626]/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-7 h-7 animate-spin text-emerald-400" />
+              <p className="text-xs text-neutral-300 font-medium">동기화 중...</p>
             </div>
           )}
 
@@ -1211,13 +1203,45 @@ export default function ProjectEditorPage() {
               setActiveTool={setActiveTool}
               isIdentifyingMode={isIdentifyingMode}
               isMiniMapOpen={isMiniMapOpen}
+              onToggleMiniMap={() => setIsMiniMapOpen((prev) => !prev)}
               isViewerMode={isReadOnly || isViewerMode}
               reactFlowInstanceRef={reactFlowInstanceRef}
               canvasSettings={canvasSettings}
               onOpenDiagramEditor={handleOpenDiagramEditor}
               focusedDiagramId={focusedDiagramId}
+              onToggleEntityList={() => setIsEntityListOpen((prev) => !prev)}
+              onToggleDiagramList={() => setIsDiagramListOpen((prev) => !prev)}
+              onToggleVersionHistory={() => setIsVersionHistoryOpen((prev) => !prev)}
+              onOpenDomain={() => setIsDomainOpen(true)}
+              onUndo={() => manager?.undoManager.undo()}
+              onRedo={() => manager?.undoManager.redo()}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onFitView={handleFitView}
+              creatorName={project?.owner_id === user?.id ? (user?.display_name || user?.email?.split('@')[0]) : '팀원'}
+              onOpenShareModal={() => setIsShareModalOpen(true)}
             />
           )}
+
+          {/* Bottom ERDCloud Diagram & Page Tab Bar */}
+          <div className="absolute bottom-2 left-3 z-30 max-w-[calc(100%-240px)]">
+            <CanvasPagesTabBar
+              pages={pages}
+              activePageId={activePageId}
+              onSelectPage={(pId) => setActivePageId(pId)}
+              onAddPage={(name) => !isReadOnly && addPageAction(manager!, name)}
+              onUpdatePage={(pId, updates) => !isReadOnly && updatePageAction(manager!, pId, updates)}
+              onDeletePage={(pId) => !isReadOnly && deletePageAction(manager!, pId)}
+              onDuplicatePage={(pId) => {
+                if (isReadOnly || !manager) return;
+                const src = pages[pId];
+                if (src) {
+                  addPageAction(manager, `${src.name || '페이지'} (사본)`);
+                }
+              }}
+              isReadOnly={isReadOnly || isViewerMode}
+            />
+          </div>
 
           {/* Left Sliding Entity List Panel */}
           <EntityListPanel
@@ -1255,91 +1279,45 @@ export default function ProjectEditorPage() {
             onDeleteVersion={handleDeleteVersion}
             currentTableCount={Object.keys(tables).length}
             currentRelationshipCount={Object.keys(relationships).length}
+            currentTables={tables}
+            currentRelationships={relationships}
+            projectTitle={projectTitle}
           />
 
-          {/* Figma Style Multi-Page Floating Tab Bar (Bottom Left) */}
-          <div className="absolute bottom-3 left-3 z-40 pointer-events-auto">
-            <CanvasPagesTabBar
-              pages={pages}
-              activePageId={activePageId}
-              onSelectPage={(pId) => setActivePageId(pId)}
-              onAddPage={handleAddPage}
-              onUpdatePage={handleUpdatePage}
-              onDeletePage={handleDeletePage}
-              onDuplicatePage={handleDuplicatePage}
-              isReadOnly={isReadOnly || isViewerMode}
-            />
-          </div>
-
-          {/* Floating Fit View Button (Bottom Right) */}
-          <div className="absolute bottom-3 right-3 z-30 pointer-events-auto">
-            <button
-              onClick={handleFitView}
-              className="flex items-center justify-center w-8 h-8 rounded-full bg-[#1e1e1e]/95 hover:bg-[#2c2c2c] active:scale-95 text-neutral-300 hover:text-white border border-white/15 backdrop-blur-md shadow-2xl transition-all"
-              title="전체 화면 맞춤 (Fit View)"
-            >
-              <Maximize2 className="w-3.5 h-3.5 text-emerald-400" />
-            </button>
-          </div>
-
-          {/* Read Only Watermark Notice for Viewer (3초 후 자동 숨김 및 X 닫기 지원) */}
-          {(isReadOnly || isViewerMode) && showViewerNotice && (
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 bg-[#1e1e1e]/95 border border-purple-500/40 px-3.5 py-1.5 rounded-full backdrop-blur-md shadow-2xl flex items-center gap-2.5 text-xs text-neutral-200 pointer-events-auto z-30 whitespace-nowrap animate-in fade-in slide-in-from-top-2 duration-200">
-              <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0" />
-              <span>
-                현재 <strong>{isViewerMode ? '뷰어 모드 (편집 잠금)' : 'Viewer(읽기 전용)'}</strong> 상태입니다.
-              </span>
-              <button
-                onClick={() => setShowViewerNotice(false)}
-                className="ml-1 p-0.5 rounded-full text-neutral-400 hover:text-white hover:bg-white/15 transition-colors"
-                title="알림 닫기"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          )}
-
-          {/* Floating Validation Panel */}
-          <ValidationPanel
-            isOpen={isValidationOpen}
-            onClose={() => setIsValidationOpen(false)}
-            issues={issues}
+          {/* Canvas Settings Inspector Panel */}
+          <CanvasInspector
+            isOpen={isInspectorOpen}
+            onClose={() => setIsInspectorOpen(false)}
+            settings={canvasSettings}
+            onUpdateSettings={handleUpdateCanvasSettings}
+            tableCount={Object.keys(tables).length}
+            relationshipCount={Object.keys(relationships).length}
+            displayMode={displayMode}
+            setDisplayMode={setDisplayMode}
+            onOpenExport={() => setIsExportOpen(true)}
+            onOpenDomain={() => setIsDomainOpen(true)}
           />
         </main>
-
-        {/* Figma Right Inspector Panel (Page Background, Grid, Schema Stats) */}
-        <CanvasInspector
-          isOpen={isInspectorOpen}
-          onClose={() => setIsInspectorOpen(false)}
-          settings={canvasSettings}
-          onUpdateSettings={handleUpdateCanvasSettings}
-          tableCount={Object.keys(tables).length}
-          relationshipCount={Object.keys(relationships).length}
-          displayMode={displayMode}
-          setDisplayMode={setDisplayMode}
-          onOpenExport={() => setIsExportOpen(true)}
-          onOpenDomain={() => setIsDomainOpen(true)}
-          onOpenImport={() => setIsImportOpen(true)}
-        />
       </div>
 
-      {/* Bottom Status Bar */}
-      <BottomBar
-        onOpenDomain={() => setIsDomainOpen(true)}
-        onOpenImport={() => setIsImportOpen(true)}
-        onOpenExport={() => setIsExportOpen(true)}
-        isMiniMapOpen={isMiniMapOpen}
-        setIsMiniMapOpen={setIsMiniMapOpen}
-        onlineUsers={onlineUsers}
-      />
-
-      {/* Mermaid Diagram Code Editor Modal */}
-      <MermaidEditorModal
-        isOpen={isDiagramModalOpen}
-        onClose={() => setIsDiagramModalOpen(false)}
-        diagram={editingDiagram}
-        onSave={handleSaveDiagram}
-      />
+      {/* Mermaid Sequence / Architecture Diagram Editor Modal */}
+      {editingDiagram && (
+        <MermaidEditorModal
+          isOpen={isDiagramModalOpen}
+          onClose={() => {
+            setIsDiagramModalOpen(false);
+            setEditingDiagram(null);
+          }}
+          diagram={editingDiagram}
+          onSave={(updates) => {
+            if (manager && editingDiagram && !isReadOnly) {
+              updateDiagramAction(manager, editingDiagram.id, updates);
+            }
+            setIsDiagramModalOpen(false);
+            setEditingDiagram(null);
+          }}
+        />
+      )}
 
       {/* Export Modal (DDL / PNG / JSON) */}
       <ExportModal
@@ -1352,10 +1330,11 @@ export default function ProjectEditorPage() {
         domains={domains}
       />
 
-      {/* Import Modal (JSON Restore / Merge) */}
+      {/* Import Modal */}
       <ImportModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
+        onSuccess={() => setIsImportOpen(false)}
         manager={manager}
       />
 

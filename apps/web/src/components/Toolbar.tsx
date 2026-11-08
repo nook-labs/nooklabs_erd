@@ -3,26 +3,23 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DisplayMode } from '@/types/erd';
-import { ValidationIssue } from '@/validation/validator';
-import { ProjectRole } from '@/lib/supabase/types';
 import {
   Undo2,
   Redo2,
-  AlertCircle,
-  CheckCircle2,
-  Database,
   Pencil,
   Check,
-  ChevronLeft,
-  Users,
-  Share2,
-  Eye,
-  SlidersHorizontal,
-  ListTree,
-  History,
-  Search,
   Cloud,
-  Loader2,
+  ChevronLeft,
+  Download,
+  Upload,
+  Plus,
+  Layers,
+  Lock,
+  Unlock,
+  Settings,
+  Search,
+  Share2,
+  HelpCircle,
 } from 'lucide-react';
 
 interface ToolbarProps {
@@ -30,19 +27,22 @@ interface ToolbarProps {
   onUpdateTitle: (newTitle: string) => void;
   displayMode: DisplayMode;
   setDisplayMode: (mode: DisplayMode) => void;
-  issues: ValidationIssue[];
-  onToggleValidation: () => void;
+  issues?: any[];
+  onToggleValidation?: () => void;
   onUndo: () => void;
   onRedo: () => void;
   isConnected: boolean;
   saveStatus?: 'synced' | 'saving' | 'error';
-  userRole?: ProjectRole;
+  userRole?: string;
   onOpenShareModal?: () => void;
   memberCount?: number;
   onToggleInspector?: () => void;
   isInspectorOpen?: boolean;
   onToggleEntityList?: () => void;
   isEntityListOpen?: boolean;
+  onToggleDiagramList?: () => void;
+  isDiagramListOpen?: boolean;
+  onAddDiagram?: () => void;
   onToggleVersionHistory?: () => void;
   isVersionHistoryOpen?: boolean;
   versionCount?: number;
@@ -50,6 +50,8 @@ interface ToolbarProps {
   isViewerMode?: boolean;
   onToggleViewerMode?: () => void;
   onOpenSearch?: () => void;
+  onOpenExport?: () => void;
+  onOpenImport?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -57,26 +59,21 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onUpdateTitle,
   displayMode,
   setDisplayMode,
-  issues,
-  onToggleValidation,
   onUndo,
   onRedo,
   isConnected,
   saveStatus = 'synced',
-  userRole = 'owner',
-  onOpenShareModal,
-  memberCount = 1,
-  onToggleInspector,
-  isInspectorOpen = false,
-  onToggleEntityList,
-  isEntityListOpen = false,
-  onToggleVersionHistory,
-  isVersionHistoryOpen = false,
-  versionCount = 0,
-  tableCount = 0,
   isViewerMode = false,
   onToggleViewerMode,
+  onToggleInspector,
+  isInspectorOpen = false,
+  onToggleDiagramList,
+  isDiagramListOpen = false,
+  onAddDiagram,
   onOpenSearch,
+  onOpenShareModal,
+  onOpenExport,
+  onOpenImport,
 }) => {
   const router = useRouter();
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -86,12 +83,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     setTitle(projectTitle);
   }, [projectTitle]);
 
-  const errorCount = issues.filter((i) => i.severity === 'error').length;
-  const warningCount = issues.filter((i) => i.severity === 'warning').length;
-  const isReadOnly = userRole === 'viewer' || isViewerMode;
-
   const handleFinishEdit = () => {
-    if (isReadOnly) return;
+    if (isViewerMode) return;
     setIsEditingTitle(false);
     if (title.trim()) {
       onUpdateTitle(title.trim());
@@ -100,267 +93,239 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     }
   };
 
-  const getRoleBadge = () => {
-    if (isViewerMode) {
-      return (
-        <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 flex items-center gap-1">
-          <Eye className="w-3 h-3 text-purple-400" /> <span>뷰어 모드</span>
-        </span>
-      );
-    }
-    switch (userRole) {
-      case 'owner':
-        return (
-          <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-            👑 Owner
-          </span>
-        );
-      case 'editor':
-        return (
-          <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30">
-            ✏️ Editor
-          </span>
-        );
-      case 'viewer':
-        return (
-          <span className="whitespace-nowrap shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded bg-neutral-600/30 text-neutral-300 border border-neutral-500/40 flex items-center gap-1">
-            <Eye className="w-3 h-3 text-neutral-400" /> <span className="hidden sm:inline">읽기 전용</span>
-          </span>
-        );
-    }
-  };
-
   return (
-    <header className="h-9 bg-[#2c2c2c] border-b border-white/[0.08] px-2 sm:px-3 flex items-center justify-between z-30 select-none shadow-sm shrink-0 w-full overflow-x-hidden">
-      {/* Left Section: Back to Dashboard & Project Title & Role */}
-      <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-        {/* Back to Dashboard Button */}
+    <header className="h-[34px] bg-[#2c2c2c] border-b border-[#1f1f1f] px-3 flex items-center justify-between z-30 select-none shrink-0 w-full font-sans text-neutral-200">
+      {/* Left: ERDCloud Signature Cloud Logo + Project Name + Undo/Redo */}
+      <div className="flex items-center gap-2 min-w-0">
+        {/* Back / Home Logo Button */}
         <button
           onClick={() => router.push('/dashboard')}
           title="대시보드로 이동"
-          className="flex items-center justify-center h-6.5 px-1.5 rounded text-neutral-300 hover:text-white hover:bg-white/[0.08] text-[11px] font-semibold transition-colors shrink-0"
+          className="flex items-center gap-1 text-[#38bdf8] hover:text-white transition-colors"
         >
-          <ChevronLeft className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden sm:inline ml-0.5">대시보드</span>
+          {/* ERD Cloud Style Icon */}
+          <div className="flex items-center gap-0.5 font-black text-xs tracking-tighter">
+            <Cloud className="w-4 h-4 fill-[#38bdf8] text-[#38bdf8]" />
+            <span className="text-[11px] font-extrabold text-white tracking-tight">ERD</span>
+          </div>
         </button>
 
-        <div className="h-3 w-[1px] bg-white/[0.1] shrink-0" />
+        <div className="h-3 w-[1px] bg-white/20" />
 
-        {/* Brand Icon */}
-        <div className="hidden md:flex items-center gap-1 shrink-0">
-          <div className="w-4 h-4 rounded bg-[#0c8ce9] flex items-center justify-center shadow-sm">
-            <Database className="w-2.5 h-2.5 text-white" />
-          </div>
-        </div>
-
-        {/* Project Title Inline Editor */}
-        <div className="flex items-center gap-1 min-w-0">
-          {isEditingTitle && !isReadOnly ? (
-            <div className="flex items-center gap-1 min-w-0">
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                onBlur={handleFinishEdit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleFinishEdit();
-                  if (e.key === 'Escape') {
-                    setTitle(projectTitle);
-                    setIsEditingTitle(false);
-                  }
-                }}
-                className="bg-[#1e1e1e] text-white font-medium text-xs px-1.5 py-0.5 rounded border border-[#0c8ce9] outline-none w-28 sm:w-40 shadow-inner"
-                autoFocus
-              />
-              <button
-                onClick={handleFinishEdit}
-                className="p-0.5 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-950/40 rounded transition-colors shrink-0"
-                title="저장"
-              >
-                <Check className="w-3 h-3" />
-              </button>
-            </div>
-          ) : (
+        {/* Project Title (Inline Editable like ERDCloud) */}
+        {isEditingTitle && !isViewerMode ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={title}
+              autoFocus
+              onChange={(e) => setTitle(e.target.value)}
+              onBlur={handleFinishEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleFinishEdit();
+                if (e.key === 'Escape') {
+                  setTitle(projectTitle);
+                  setIsEditingTitle(false);
+                }
+              }}
+              className="bg-black/80 text-white font-bold text-xs px-1.5 py-0.5 rounded border border-[#38bdf8] outline-none w-36 shadow-inner"
+            />
             <button
-              onClick={() => !isReadOnly && setIsEditingTitle(true)}
-              disabled={isReadOnly}
-              className={`group flex items-center gap-1 px-1.5 py-0.5 rounded transition-all text-neutral-200 min-w-0 max-w-[120px] sm:max-w-[200px] ${
-                !isReadOnly ? 'hover:bg-white/[0.08]' : 'cursor-default'
-              }`}
-              title={!isReadOnly ? '클릭하여 프로젝트 이름 변경' : '읽기 전용'}
+              onClick={handleFinishEdit}
+              className="p-0.5 text-emerald-400 hover:text-white"
             >
-              <span className="font-semibold text-xs text-white truncate">
-                {projectTitle || 'Untitled_Schema'}
-              </span>
-              {!isReadOnly && (
-                <Pencil className="w-2.5 h-2.5 text-neutral-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0 ml-0.5" />
-              )}
+              <Check className="w-3 h-3" />
             </button>
-          )}
-
-          {getRoleBadge()}
-
-          {/* Minimal Connection & Sync Status Dot */}
-          <div className="flex items-center pl-0.5 shrink-0">
-            {saveStatus === 'error' || !isConnected ? (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse ring-2 ring-rose-950/80 cursor-help"
-                title={!isConnected ? '네트워크/웹소켓 연결 끊김' : '클라우드 저장 오류 (로컬 캐시 보존됨)'}
-              />
-            ) : (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 opacity-70 hover:opacity-100 transition-opacity cursor-help"
-                title="실시간 연결 및 클라우드 동기화 정상"
-              />
+          </div>
+        ) : (
+          <div
+            onClick={() => !isViewerMode && setIsEditingTitle(true)}
+            className="flex items-center gap-1 cursor-pointer group hover:opacity-90"
+            title="클릭하여 프로젝트 이름 변경"
+          >
+            <span className="font-bold text-xs text-white tracking-tight truncate max-w-[200px]">
+              {projectTitle || 'Untitled'}
+            </span>
+            {!isViewerMode && (
+              <Pencil className="w-2.5 h-2.5 text-neutral-400 opacity-60 group-hover:opacity-100" />
             )}
           </div>
-        </div>
+        )}
 
-        {/* Undo / Redo Actions */}
-        {!isReadOnly && (
-          <div className="hidden sm:flex items-center gap-0.5 pl-1 border-l border-white/[0.08] shrink-0">
+        {/* Undo / Redo */}
+        {!isViewerMode && (
+          <div className="flex items-center gap-0.5 ml-2 pl-2 border-l border-white/10">
             <button
               onClick={onUndo}
-              className="p-1 rounded hover:bg-white/[0.08] text-neutral-400 hover:text-white active:scale-95 transition-all"
+              className="p-1 hover:bg-white/10 rounded text-neutral-400 hover:text-white transition-colors"
               title="실행 취소 (Ctrl+Z)"
             >
-              <Undo2 className="w-3 h-3" />
+              <Undo2 className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={onRedo}
-              className="p-1 rounded hover:bg-white/[0.08] text-neutral-400 hover:text-white active:scale-95 transition-all"
+              className="p-1 hover:bg-white/10 rounded text-neutral-400 hover:text-white transition-colors"
               title="다시 실행 (Ctrl+Y)"
             >
-              <Redo2 className="w-3 h-3" />
+              <Redo2 className="w-3.5 h-3.5" />
             </button>
           </div>
         )}
       </div>
 
-      {/* Right Section: Validation, Design Inspector Toggle, Share Button */}
-      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-        {/* Global Search Trigger Button */}
-        {onOpenSearch && (
-          <button
-            onClick={onOpenSearch}
-            className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-medium border border-white/[0.08] bg-[#1e1e1e] hover:bg-[#282828] text-neutral-300 hover:text-white transition-all active:scale-[0.98] shrink-0 whitespace-nowrap shadow-sm h-6.5"
-            title="테이블 및 속성 검색 (단축키: Ctrl + F)"
-          >
-            <Search className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span className="hidden md:inline">검색</span>
-            <kbd className="hidden lg:inline-block text-[8px] px-1 py-0.2 rounded bg-black/40 border border-white/20 font-mono text-neutral-400">
-              Ctrl+F
-            </kbd>
-          </button>
-        )}
-
-        {/* Validation Issues Trigger */}
+      {/* Center: ERDCloud Mode Switcher [논리] [물리] */}
+      <div className="flex items-center bg-[#1f1f1f] border border-[#444] rounded-[3px] p-0.5 text-[11px]">
         <button
-          onClick={onToggleValidation}
-          className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-medium border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap h-6.5 ${
-            errorCount > 0
-              ? 'bg-rose-950/50 border-rose-800/80 text-rose-300 hover:bg-rose-900/50'
-              : warningCount > 0
-              ? 'bg-amber-950/50 border-amber-800/80 text-amber-300 hover:bg-amber-900/50'
-              : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
+          onClick={() => setDisplayMode('logical')}
+          className={`px-3 py-0.5 rounded-[2px] transition-all font-medium ${
+            displayMode === 'logical'
+              ? 'bg-[#1b5e20] text-white font-bold'
+              : 'text-neutral-400 hover:text-white'
           }`}
-          title="스키마 무결성 검증"
+          title="논리명(한글) 중심 보기"
         >
-          {errorCount > 0 ? (
-            <AlertCircle className="w-3 h-3 text-rose-400 shrink-0" />
-          ) : warningCount > 0 ? (
-            <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
-          ) : (
-            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-          )}
-          <span className="hidden sm:inline">
-            {issues.length > 0 ? `검증 (${issues.length})` : '정상'}
-          </span>
+          논리
         </button>
+        <button
+          onClick={() => setDisplayMode('physical')}
+          className={`px-3 py-0.5 rounded-[2px] transition-all font-medium ${
+            displayMode === 'physical'
+              ? 'bg-[#1b5e20] text-white font-bold'
+              : 'text-neutral-400 hover:text-white'
+          }`}
+          title="물리명(영문 컬럼명) 중심 보기"
+        >
+          물리
+        </button>
+        <button
+          onClick={() => setDisplayMode('both')}
+          className={`px-2 py-0.5 rounded-[2px] transition-all font-medium ${
+            displayMode === 'both'
+              ? 'bg-[#1b5e20] text-white font-bold'
+              : 'text-neutral-400 hover:text-white'
+          }`}
+          title="논리명 + 물리명 동시 표기"
+        >
+          논리/물리
+        </button>
+      </div>
 
-        {/* Entity List Toggle Button */}
-        {onToggleEntityList && (
+      {/* Right: ERDCloud Style Action Bar */}
+      <div className="flex items-center gap-1.5 text-neutral-300">
+        {/* Add Diagram Button (+) */}
+        {onAddDiagram && (
           <button
-            onClick={onToggleEntityList}
-            className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-medium border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap h-6.5 ${
-              isEntityListOpen
-                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
-                : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
-            }`}
-            title="엔티티 목록 (ENTITY)"
+            onClick={onAddDiagram}
+            className="p-1 hover:bg-white/10 rounded text-neutral-300 hover:text-white transition-colors"
+            title="새 다이어그램 추가 (Mermaid/시퀀스)"
           >
-            <ListTree className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span className="hidden sm:inline">엔티티</span>
-            <span className="text-[10px] text-neutral-400">({tableCount})</span>
+            <Plus className="w-3.5 h-3.5" />
           </button>
         )}
 
-        {/* Version History Toggle Button */}
-        {onToggleVersionHistory && (
+        {/* Diagram List Panel Toggle */}
+        {onToggleDiagramList && (
           <button
-            onClick={onToggleVersionHistory}
-            className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-medium border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap h-6.5 ${
-              isVersionHistoryOpen
-                ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
-                : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
+            onClick={onToggleDiagramList}
+            className={`p-1 rounded transition-colors ${
+              isDiagramListOpen
+                ? 'bg-white/20 text-white'
+                : 'hover:bg-white/10 text-neutral-300 hover:text-white'
             }`}
-            title="버전 기록 및 시점 저장 (Version History)"
+            title="다이어그램 목록"
           >
-            <History className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span className="hidden sm:inline">버전</span>
-            {versionCount > 0 && (
-              <span className="text-[9px] text-emerald-400 font-bold">({versionCount})</span>
+            <Layers className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Lock / Viewer Mode Toggle */}
+        {onToggleViewerMode && (
+          <button
+            onClick={onToggleViewerMode}
+            className={`p-1 rounded transition-colors ${
+              isViewerMode
+                ? 'bg-amber-500/20 text-amber-400'
+                : 'hover:bg-white/10 text-neutral-300 hover:text-white'
+            }`}
+            title={isViewerMode ? '편집 잠금됨 (클릭하여 편집 모드로 전환)' : '편집 모드 (클릭하여 잠금)'}
+          >
+            {isViewerMode ? (
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Unlock className="w-3.5 h-3.5 opacity-80" />
             )}
           </button>
         )}
 
-        {/* Viewer Mode Toggle Button */}
-        {onToggleViewerMode && (
-          <button
-            onClick={onToggleViewerMode}
-            className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-semibold border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap h-6.5 ${
-              isViewerMode
-                ? 'bg-purple-600 hover:bg-purple-500 text-white border-purple-400 shadow-md ring-1 ring-purple-400/50'
-                : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
-            }`}
-            title={isViewerMode ? '편집 모드로 전환 (단축키: V)' : '뷰어 모드로 전환 (단축키: V / 스페이스바 없이 캔버스 이동)'}
-          >
-            <Eye className="w-3 h-3 shrink-0" />
-            <span className="hidden sm:inline">{isViewerMode ? '뷰어 ON' : '뷰어'}</span>
-            <kbd className="hidden sm:inline-block text-[8px] px-1 py-0.2 rounded bg-black/40 border border-white/20 font-mono text-neutral-300">
-              V
-            </kbd>
-          </button>
-        )}
-
-        {/* Figma Inspector Toggle Button */}
+        {/* Canvas Inspector / Settings */}
         {onToggleInspector && (
           <button
             onClick={onToggleInspector}
-            className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded text-[11px] font-medium border transition-all active:scale-[0.98] shrink-0 whitespace-nowrap h-6.5 ${
+            className={`p-1 rounded transition-colors ${
               isInspectorOpen
-                ? 'bg-[#181818] border-[#0c8ce9] text-[#0c8ce9]'
-                : 'bg-[#1e1e1e] border-white/[0.08] text-neutral-300 hover:text-white hover:bg-[#262626]'
+                ? 'bg-white/20 text-white'
+                : 'hover:bg-white/10 text-neutral-300 hover:text-white'
             }`}
-            title="디자인 / 캔버스 배경 설정 (Inspector)"
+            title="캔버스 설정 (배경, 그리드, 줌 비율)"
           >
-            <SlidersHorizontal className="w-3 h-3 shrink-0" />
-            <span className="hidden md:inline">디자인</span>
+            <Settings className="w-3.5 h-3.5" />
           </button>
         )}
 
-        {/* Figma Blue Share Button (Guaranteed No Wrap) */}
+        {/* Quick Export Button */}
+        {onOpenExport && (
+          <button
+            onClick={onOpenExport}
+            className="p-1 hover:bg-white/10 rounded text-neutral-300 hover:text-white transition-colors"
+            title="DDL 내보내기 / 이미지 저장"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Quick Import Button */}
+        {onOpenImport && (
+          <button
+            onClick={onOpenImport}
+            className="p-1 hover:bg-white/10 rounded text-neutral-300 hover:text-white transition-colors"
+            title="SQL DDL 불러오기"
+          >
+            <Upload className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Share / Invite Modal */}
         {onOpenShareModal && (
           <button
             onClick={onOpenShareModal}
-            className="flex items-center justify-center gap-1 px-2 sm:px-2.5 py-0.5 bg-[#0c8ce9] hover:bg-[#0a77c7] text-white rounded text-xs font-semibold shadow-sm transition-all active:scale-[0.98] shrink-0 whitespace-nowrap leading-none h-6.5"
+            className="p-1 hover:bg-white/10 rounded text-neutral-300 hover:text-white transition-colors"
+            title="프로젝트 멤버 및 공유"
           >
-            <Share2 className="w-3 h-3 shrink-0" />
-            <span className="whitespace-nowrap">공유 {memberCount > 1 ? `(${memberCount})` : ''}</span>
+            <Share2 className="w-3.5 h-3.5" />
           </button>
         )}
+
+        {/* Global Search Button (Ctrl + F) */}
+        {onOpenSearch && (
+          <button
+            onClick={onOpenSearch}
+            className="p-1 hover:bg-white/10 rounded text-neutral-300 hover:text-white transition-colors"
+            title="엔티티 / 다이어그램 검색 (Ctrl+F)"
+          >
+            <Search className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        <div className="h-3 w-[1px] bg-white/20 mx-0.5" />
+
+        {/* Connection Indicator */}
+        <span
+          className={`w-2 h-2 rounded-full ${
+            isConnected && saveStatus !== 'error' ? 'bg-emerald-400' : 'bg-rose-500'
+          }`}
+          title={isConnected ? '실시간 동기화 정상' : '오프라인 / 연결 끊김'}
+        />
       </div>
     </header>
   );
 };
-
