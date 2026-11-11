@@ -19,6 +19,9 @@ import {
   importReplaceAction,
   importMergeAction,
   ImportParsedResult,
+  ImportMergePlan,
+  buildImportMergePlan,
+  readExistingState,
 } from '@/collaboration/importActions';
 import { ERDDocManager } from '@/collaboration/doc';
 
@@ -26,6 +29,7 @@ interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   manager: ERDDocManager | null;
+  activePageId?: string;
   onSuccess?: () => void;
 }
 
@@ -33,9 +37,11 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   isOpen,
   onClose,
   manager,
+  activePageId,
   onSuccess,
 }) => {
   const [jsonText, setJsonText] = useState('');
+  const [mergePlan, setMergePlan] = useState<ImportMergePlan | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [parsedData, setParsedData] = useState<ImportParsedResult | null>(null);
   const [activeTab, setActiveTab] = useState<'file' | 'paste'>('file');
@@ -47,6 +53,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const handleValidateJSON = (text: string) => {
     setErrorMsg(null);
     setParsedData(null);
+    setMergePlan(null);
     if (!text.trim()) return;
 
     try {
@@ -57,6 +64,9 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         return;
       }
       setParsedData(result);
+      if (manager) {
+        setMergePlan(buildImportMergePlan(readExistingState(manager), result, activePageId));
+      }
     } catch (err: any) {
       setErrorMsg(err.message || 'JSON 파싱 실패');
     }
@@ -111,7 +121,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
   const handleExecuteMerge = () => {
     if (!manager || !parsedData) return;
     try {
-      importMergeAction(manager, parsedData);
+      importMergeAction(manager, parsedData, activePageId);
       onSuccess?.();
       onClose();
     } catch (err: any) {
@@ -257,6 +267,33 @@ export const ImportModal: React.FC<ImportModalProps> = ({
                   <div className="text-[10px] text-neutral-400">도메인</div>
                 </div>
               </div>
+
+              {mergePlan && (
+                <div className="pt-1.5 border-t border-white/10 space-y-1 text-[11px]">
+                  <div className="text-neutral-300 font-medium">병합 시 적용 내용</div>
+                  {mergePlan.updatedTableNames.length > 0 && (
+                    <div className="text-sky-300">
+                      ✎ 기존 테이블 내용 업데이트 (위치 유지) {mergePlan.updatedTableNames.length}개:{' '}
+                      <span className="font-mono text-neutral-300">{mergePlan.updatedTableNames.join(', ')}</span>
+                    </div>
+                  )}
+                  {mergePlan.newTableNames.length > 0 && (
+                    <div className="text-emerald-300">
+                      ＋ 신규 테이블 {mergePlan.newTableNames.length}개:{' '}
+                      <span className="font-mono text-neutral-300">{mergePlan.newTableNames.join(', ')}</span>
+                    </div>
+                  )}
+                  <div className="text-neutral-400">
+                    관계선: 신규 {mergePlan.newRelationshipCount}개 / 업데이트 {mergePlan.updatedRelationshipCount}개
+                  </div>
+                  {mergePlan.warnings.map((w, i) => (
+                    <div key={i} className="text-amber-400 flex items-start gap-1">
+                      <AlertCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                      <span>{w}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -274,10 +311,10 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               onClick={handleExecuteMerge}
               disabled={!parsedData}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-[2px] bg-[#0284c7] hover:bg-[#0369a1] text-white font-medium disabled:opacity-40 disabled:pointer-events-none transition-colors text-xs shadow-sm"
-              title="기존 ERD를 유지하면서 AI가 제안한 새 테이블/관계선만 추가합니다"
+              title="같은 이름의 테이블은 위치를 유지한 채 내용만 업데이트하고, 없는 테이블/관계선은 추가합니다"
             >
               <PlusCircle className="w-3.5 h-3.5" />
-              <span>새 테이블 추가 (병합)</span>
+              <span>병합 (추가 + 기존 테이블 업데이트)</span>
             </button>
             <button
               onClick={handleExecuteReplace}

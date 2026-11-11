@@ -13,6 +13,137 @@ function getTableColumns(tbl: TableModel): ColumnModel[] {
   return order.map((cId) => tbl.columnsById[cId]).filter((c): c is ColumnModel => !!c);
 }
 
+function formatColumnType(col: ColumnModel): string {
+  if (!col.type?.name) return 'varchar(255)';
+  const t = col.type;
+  const args =
+    t.precision !== undefined
+      ? `(${t.precision}${t.scale !== undefined ? `,${t.scale}` : ''})`
+      : t.length
+      ? `(${t.length})`
+      : '';
+  return `${t.name.toLowerCase()}${args}`;
+}
+
+function formatColumnLine(col: ColumnModel): string {
+  const pName = col.physicalName || col.logicalName || 'unnamed_col';
+  const flags: string[] = [];
+  if (col.isPk) flags.push('PK');
+  if (col.isFk) flags.push('FK');
+  flags.push(col.nullable ? 'NULL' : 'NOT NULL');
+  if (col.isUnique) flags.push('UNIQUE');
+  if (col.autoIncrement) flags.push('AUTO_INCREMENT');
+  if (col.defaultExpression) flags.push(`default: ${col.defaultExpression}`);
+  if (col.domain) flags.push(`domain: ${col.domain}`);
+  return `| \`${pName}\` | ${col.logicalName || ''} | \`${formatColumnType(col)}\` | ${flags.join(', ')} | ${(col.comment || '').replace(/\|/g, '\\|').replace(/\n/g, ' ')} |`;
+}
+
+/**
+ * 단일 테이블을 AI에게 설명/작업 요청하기 위한 스크립트 생성
+ * - 대상 테이블 전체 정의 + 직접 연결된 테이블(부모/자식)의 키 컬럼 + 관계(FK 매핑)
+ */
+export function generateTableAiScript({
+  tableId,
+  tables,
+  relationships,
+  projectTitle,
+}: {
+  tableId: string;
+  tables: Record<string, TableModel>;
+  relationships: Record<string, RelationshipModel>;
+  projectTitle?: string;
+}): string {
+  const tbl = tables[tableId];
+  if (!tbl) return '';
+
+  const name = (t?: TableModel) => t?.physicalName || t?.logicalName || '(unknown)';
+  const colName = (t: TableModel | undefined, colId: string) => {
+    const c = t?.columnsById?.[colId];
+    return c ? c.physicalName || c.logicalName : '?';
+  };
+
+  const rels = Object.values(relationships || {});
+  const parentRels = rels.filter((r) => r.childTableId === tableId && tables[r.parentTableId]);
+  const childRels = rels.filter((r) => r.parentTableId === tableId && tables[r.childTableId]);
+
+  const cardText = (r: RelationshipModel) =>
+    r.cardinality === 'one-to-one' ? '1:1' : r.cardinality === 'many-to-many' ? 'N:M' : '1:N';
+  const relKind = (r: RelationshipModel) => (r.relationshipType === 'identifying' ? '식별' : '비식별');
+  const mappingText = (r: RelationshipModel) => {
+    const p = tables[r.parentTableId];
+    const c = tables[r.childTableId];
+    const maps = (r.columnMappings || []).map(
+      (m) => `\`${name(c)}.${colName(c, m.childColumnId)}\` → \`${name(p)}.${colName(p, m.parentColumnId)}\``
+    );
+    return maps.length > 0 ? maps.join(', ') : '(컬럼 매핑 미지정)';
+  };
+
+  let md = `# [테이블 컨텍스트] \`${name(tbl)}\`${tbl.logicalName && tbl.logicalName !== tbl.physicalName ? ` (${tbl.logicalName})` : ''}\n\n`;
+  md += `> 프로젝트: ${projectTitle || 'ERD Project'} / 스키마: ${tbl.schemaName || 'public'}\n`;
+  md += `> 아래는 ERD 도구에서 추출한 이 테이블의 최신 정의입니다. 답변 시 이 정의를 기준으로 삼아주세요.\n\n`;
+
+  if (tbl.comment) {
+    md += `## 테이블 설명\n${tbl.comment}\n\n`;
+  }
+
+  md += `## 컬럼 정의\n`;
+  md += `| 물리명 | 논리명 | 타입 | 제약 | 설명 |\n|---|---|---|---|---|\n`;
+  getTableColumns(tbl).forEach((col) => {
+    md += `${formatColumnLine(col)}\n`;
+  });
+  md += `\n`;
+
+  md += `## 관계\n`;
+  if (parentRels.length === 0 && childRels.length === 0) {
+    md += `(연결된 관계선 없음)\n\n`;
+  } else {
+    if (parentRels.length > 0) {
+      md += `### 참조하는 부모 테이블\n`;
+      parentRels.forEach((r) => {
+        md += `- \`${name(tables[r.parentTableId])}\` ${cardText(r)} ${relKind(r)} 관계 — ${mappingText(r)} (ON DELETE ${r.onDelete || 'NO ACTION'})\n`;
+      });
+      md += `\n`;
+    }
+    if (childRels.length > 0) {
+      md += `### 이 테이블을 참조하는 자식 테이블\n`;
+      childRels.forEach((r) => {
+        md += `- \`${name(tables[r.childTableId])}\` ${cardText(r)} ${relKind(r)} 관계 — ${mappingText(r)} (ON DELETE ${r.onDelete || 'NO ACTION'})\n`;
+      });
+      md += `\n`;
+    }
+  }
+
+  // 연결된 테이블 요약 (키 컬럼 + 설명)
+  const relatedIds = Array.from(
+    new Set([...parentRels.map((r) => r.parentTableId), ...childRels.map((r) => r.childTableId)])
+  ).filter((id) => id !== tableId);
+
+  if (relatedIds.length > 0) {
+    md += `## 연관 테이블 요약\n`;
+    relatedIds.forEach((id) => {
+      const t = tables[id];
+      const keyCols = getTableColumns(t).filter((c) => c.isPk || c.isFk);
+      md += `- \`${name(t)}\`${t.logicalName && t.logicalName !== t.physicalName ? ` (${t.logicalName})` : ''}`;
+      if (t.comment) md += ` — ${t.comment.replace(/\n/g, ' ')}`;
+      md += `\n`;
+      if (keyCols.length > 0) {
+        md += `  - 키: ${keyCols
+          .map((c) => `\`${c.physicalName}\` ${formatColumnType(c)}${c.isPk ? ' PK' : ''}${c.isFk ? ' FK' : ''}`)
+          .join(', ')}\n`;
+      }
+    });
+    md += `\n`;
+  }
+
+  md += `---\n`;
+  md += `## 요청\n`;
+  md += `(여기에 이 테이블과 관련해 원하는 작업을 적어주세요. 예: 이 테이블의 용도와 각 컬럼 의미를 설명해줘 / 이 테이블 CRUD API를 작성해줘 / 컬럼을 추가·변경하려는데 검토해줘)\n\n`;
+  md += `> 스키마 변경을 제안할 경우, ERD 도구의 [불러오기 > 병합]에 바로 붙여넣을 수 있도록 답변 끝에 아래 형식의 JSON을 포함해주세요. 같은 physicalName의 테이블은 위치를 유지한 채 내용만 업데이트되므로, 변경할 테이블은 **전체 컬럼을 포함**해서 출력해주세요.\n`;
+  md += `> 형식: \`{ "tables": [{ "physicalName", "logicalName", "comment", "columns": [{ "physicalName", "logicalName", "type", "isPk", "isFk", "nullable", "defaultExpression", "comment" }] }], "relationships": [{ "parentTable", "childTable", "parentColumn", "childColumn", "relationshipType", "cardinality" }] }\`\n`;
+
+  return md;
+}
+
 /**
  * Generates a clean, token-efficient Markdown prompt representing the entire ERD schema for LLMs.
  */
@@ -129,6 +260,8 @@ export function generateAiSchemaPrompt({
   md += `    {\n`;
   md += `      "parentTable": "users",\n`;
   md += `      "childTable": "신규_테이블_영문명",\n`;
+  md += `      "parentColumn": "id",\n`;
+  md += `      "childColumn": "user_id",\n`;
   md += `      "relationshipType": "non-identifying",\n`;
   md += `      "cardinality": "one-to-many"\n`;
   md += `    }\n`;

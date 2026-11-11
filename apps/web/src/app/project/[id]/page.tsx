@@ -1336,6 +1336,7 @@ export default function ProjectEditorPage() {
         onClose={() => setIsImportOpen(false)}
         onSuccess={() => setIsImportOpen(false)}
         manager={manager}
+        activePageId={activePageId}
       />
 
       {/* Domain Modal */}

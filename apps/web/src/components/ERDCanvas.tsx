@@ -30,6 +30,7 @@ import {
 } from '@/types/erd';
 import { ERDDocManager } from '@/collaboration/doc';
 import { TableNode } from './TableNode';
+import { generateTableAiScript } from '@/lib/aiPromptGenerator';
 import { MemoNode } from './MemoNode';
 import { MermaidNode } from './MermaidNode';
 import { RelationshipEdge } from './RelationshipEdge';
@@ -352,6 +353,25 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
               !isViewerMode && reorderColumnsAction(manager, tId, newOrder),
             onMoveColumn: (tId: string, cId: string, direction: 'up' | 'down') =>
               !isViewerMode && moveColumnAction(manager, tId, cId, direction),
+            onCopyAiScript: async (tId: string) => {
+              // 클릭 시점의 최신 문서 상태로 생성 (노드 재계산 의존성 불필요)
+              const allTables: Record<string, TableModel> = {};
+              const allRels: Record<string, RelationshipModel> = {};
+              manager.tablesMap.forEach((v, k) => (allTables[k] = v));
+              manager.relationshipsMap.forEach((v, k) => (allRels[k] = v));
+              const script = generateTableAiScript({
+                tableId: tId,
+                tables: allTables,
+                relationships: allRels,
+                projectTitle: manager.metaMap.get('title'),
+              });
+              try {
+                await navigator.clipboard.writeText(script);
+                return true;
+              } catch {
+                return false;
+              }
+            },
             onTableClick: (tId: string) => {
               if (isViewerMode) {
                 setSelectedNodeId(tId);

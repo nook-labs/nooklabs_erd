@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Handle, Position, NodeProps, useViewport } from '@xyflow/react';
 import { TableModel, ColumnModel, DisplayMode, DomainItem } from '@/types/erd';
-import { Key, Plus, Trash2, Palette, Check } from 'lucide-react';
+import { Key, Plus, Trash2, Palette, Check, GripVertical, Sparkles } from 'lucide-react';
 
 // Helper to convert hex color to rgba for body tinting
 function hexToRgba(hex: string, alpha: number): string {
@@ -36,6 +36,8 @@ export interface TableNodeData {
   onAddColumn: (tableId: string, columnData?: Partial<ColumnModel>, insertIndex?: number) => void;
   onUpdateColumn: (tableId: string, columnId: string, updates: Partial<ColumnModel>) => void;
   onDeleteColumn: (tableId: string, columnId: string) => void;
+  onReorderColumns?: (tableId: string, newOrder: string[]) => void;
+  onCopyAiScript?: (tableId: string) => Promise<boolean> | boolean;
   onTableClick?: (tableId: string) => void;
 }
 
@@ -64,7 +66,8 @@ interface MiniInputProps {
   expandOnEdit?: boolean;
   tooltipContent?: string;
   onCommit: (val: string) => void;
-  onEnterPress?: () => void;
+  /** Ctrl/Cmd + Enter: 현재 행 아래에 새 행 삽입 */
+  onInsertBelow?: () => void;
 }
 
 const MiniInput: React.FC<MiniInputProps> = ({
@@ -76,16 +79,52 @@ const MiniInput: React.FC<MiniInputProps> = ({
   expandOnEdit = false,
   tooltipContent,
   onCommit,
-  onEnterPress,
+  onInsertBelow,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [val, setVal] = useState(initialValue || '');
   const [isHovered, setIsHovered] = useState(false);
   const isComposingRef = useRef(false);
+  const editorRef = useRef<HTMLDivElement | HTMLInputElement | null>(null);
+  const valRef = useRef(val);
+  valRef.current = val;
 
   useEffect(() => {
     setVal(initialValue || '');
   }, [initialValue]);
+
+  const finishEdit = useCallback(
+    (commit: boolean) => {
+      setIsEditing(false);
+      setIsHovered(false);
+      if (commit) onCommit(valRef.current);
+      else setVal(initialValue || '');
+    },
+    [onCommit, initialValue]
+  );
+
+  // 캔버스(React Flow)는 mousedown 기본동작을 막아 blur가 발생하지 않는 경우가 있어
+  // 편집 중에는 바깥 클릭을 직접 감지하여 편집창을 닫는다.
+  useEffect(() => {
+    if (!isEditing) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (editorRef.current && !editorRef.current.contains(e.target as Node)) {
+        finishEdit(true);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [isEditing, finishEdit]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !isComposingRef.current && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      finishEdit(true);
+      if (e.ctrlKey || e.metaKey) onInsertBelow?.();
+    } else if (e.key === 'Escape') {
+      finishEdit(false);
+    }
+  };
 
   if (!isEditing || readOnly) {
     return (
@@ -98,6 +137,7 @@ const MiniInput: React.FC<MiniInputProps> = ({
           onClick={(e) => {
             if (!readOnly) {
               e.stopPropagation();
+              setIsHovered(false);
               setIsEditing(true);
             }
           }}
@@ -129,6 +169,9 @@ const MiniInput: React.FC<MiniInputProps> = ({
   if (expandOnEdit) {
     return (
       <div
+        ref={(el) => {
+          editorRef.current = el;
+        }}
         onClick={(e) => e.stopPropagation()}
         className="absolute right-0 top-1/2 -translate-y-1/2 z-50 min-w-[260px] max-w-[340px] bg-[#1a1b1e] border border-sky-400/90 shadow-2xl rounded-[3px] p-1 nodrag flex items-center gap-1.5 animate-in fade-in zoom-in-95 duration-100"
       >
@@ -139,30 +182,19 @@ const MiniInput: React.FC<MiniInputProps> = ({
           placeholder={placeholder}
           className="w-full bg-[#111214] text-white text-[11px] px-2 py-1 outline-none rounded-[2px] border border-white/10 nodrag font-sans"
           onChange={(e) => setVal(e.target.value)}
-          onBlur={() => {
-            setIsEditing(false);
-            onCommit(val);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !isComposingRef.current) {
-              e.preventDefault();
-              setIsEditing(false);
-              onCommit(val);
-              onEnterPress?.();
-            } else if (e.key === 'Escape') {
-              setIsEditing(false);
-              setVal(initialValue || '');
-            }
-          }}
+          onBlur={() => finishEdit(true)}
+          onKeyDown={handleKeyDown}
           onCompositionStart={() => {
             isComposingRef.current = true;
           }}
           onCompositionEnd={() => {
             isComposingRef.current = false;
-            onCommit(val);
           }}
         />
-        <span className="text-[9px] text-neutral-400 font-mono shrink-0 pr-1 select-none">
+        <span
+          className="text-[9px] text-neutral-400 font-mono shrink-0 pr-1 select-none"
+          title="Enter: 저장 · Ctrl+Enter: 아래에 행 추가 · Esc: 취소"
+        >
           Enter⏎
         </span>
       </div>
@@ -171,34 +203,24 @@ const MiniInput: React.FC<MiniInputProps> = ({
 
   return (
     <input
+      ref={(el) => {
+        editorRef.current = el;
+      }}
       type="text"
       autoFocus
       list={list}
       value={val}
       placeholder={placeholder}
+      title="Enter: 저장 · Ctrl+Enter: 아래에 행 추가 · Esc: 취소"
       className={`bg-black/80 text-white outline-none border border-emerald-400/80 px-1 py-0 m-0 leading-tight rounded-none nodrag ${className}`}
       onChange={(e) => setVal(e.target.value)}
-      onBlur={() => {
-        setIsEditing(false);
-        onCommit(val);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' && !isComposingRef.current) {
-          e.preventDefault();
-          setIsEditing(false);
-          onCommit(val);
-          onEnterPress?.();
-        } else if (e.key === 'Escape') {
-          setIsEditing(false);
-          setVal(initialValue || '');
-        }
-      }}
+      onBlur={() => finishEdit(true)}
+      onKeyDown={handleKeyDown}
       onCompositionStart={() => {
         isComposingRef.current = true;
       }}
       onCompositionEnd={() => {
         isComposingRef.current = false;
-        onCommit(val);
       }}
     />
   );
@@ -219,8 +241,54 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     onAddColumn,
     onUpdateColumn,
     onDeleteColumn,
+    onReorderColumns,
+    onCopyAiScript,
     onTableClick,
   } = nodeData;
+
+  // 행 드래그 순서 변경 상태
+  const [dragColId, setDragColId] = useState<string | null>(null);
+  const [dropIndicator, setDropIndicator] = useState<number | null>(null); // 이 인덱스 "앞"에 삽입
+  const [aiCopied, setAiCopied] = useState(false);
+
+  const handleRowDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
+    if (!dragColId) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = e.currentTarget.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    setDropIndicator(after ? index + 1 : index);
+  };
+
+  const handleRowDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragColId && dropIndicator !== null && onReorderColumns) {
+      const order = [...table.columnOrder];
+      const from = order.indexOf(dragColId);
+      if (from !== -1) {
+        order.splice(from, 1);
+        const to = dropIndicator > from ? dropIndicator - 1 : dropIndicator;
+        order.splice(to, 0, dragColId);
+        if (order.join('|') !== table.columnOrder.join('|')) {
+          onReorderColumns(table.id, order);
+        }
+      }
+    }
+    setDragColId(null);
+    setDropIndicator(null);
+  };
+
+  const handleCopyAiScript = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onCopyAiScript) return;
+    const ok = await onCopyAiScript(table.id);
+    if (ok) {
+      setAiCopied(true);
+      setTimeout(() => setAiCopied(false), 1500);
+    }
+  };
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState('');
@@ -413,8 +481,32 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         )}
 
         {/* Minimal Actions on Hover */}
-        {!isViewerMode && !isZoomedOut && (
-          <div className="flex items-center gap-0.5 opacity-0 group-hover/header:opacity-100 transition-opacity nodrag shrink-0 ml-1">
+        {!isZoomedOut && (
+          <div
+            className={`flex items-center gap-0.5 transition-opacity nodrag shrink-0 ml-1 ${
+              aiCopied ? 'opacity-100' : 'opacity-0 group-hover/header:opacity-100'
+            }`}
+          >
+            {onCopyAiScript && (
+              <button
+                onClick={handleCopyAiScript}
+                className={`p-0.5 hover:bg-black/30 rounded flex items-center gap-0.5 ${
+                  aiCopied ? 'text-emerald-300' : 'text-amber-200/90 hover:text-amber-100'
+                }`}
+                title="이 테이블의 AI 설명용 스크립트 복사 (컬럼 + 연관 테이블 + 관계)"
+              >
+                {aiCopied ? (
+                  <>
+                    <Check className="w-2.5 h-2.5" />
+                    <span className="text-[9px] font-normal">복사됨</span>
+                  </>
+                ) : (
+                  <Sparkles className="w-2.5 h-2.5" />
+                )}
+              </button>
+            )}
+            {!isViewerMode && (
+            <>
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -445,6 +537,8 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
             >
               <Trash2 className="w-2.5 h-2.5" />
             </button>
+            </>
+            )}
           </div>
         )}
 
@@ -485,8 +579,38 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           return (
             <div
               key={col.id}
-              className="px-1.5 py-0.5 h-[22px] flex items-center text-[11px] hover:bg-white/[0.06] group/row transition-colors"
+              onDragOver={(e) => handleRowDragOver(e, index)}
+              onDrop={handleRowDrop}
+              className={`relative px-1.5 py-0.5 h-[22px] flex items-center text-[11px] hover:bg-white/[0.06] group/row transition-colors ${
+                dragColId === col.id ? 'opacity-40' : ''
+              } ${dropIndicator === index ? 'shadow-[inset_0_2px_0_#34d399]' : ''} ${
+                dropIndicator === index + 1 && index === columns.length - 1
+                  ? 'shadow-[inset_0_-2px_0_#34d399]'
+                  : ''
+              }`}
             >
+              {/* 0. Drag Handle (행 순서 변경) */}
+              {!isViewerMode && onReorderColumns && (
+                <div
+                  draggable
+                  onDragStart={(e) => {
+                    e.stopPropagation();
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', col.id);
+                    setDragColId(col.id);
+                  }}
+                  onDragEnd={() => {
+                    setDragColId(null);
+                    setDropIndicator(null);
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  className="absolute -left-[2px] top-0 h-full w-[10px] flex items-center justify-center cursor-grab active:cursor-grabbing opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-neutral-400 nodrag"
+                  title="드래그하여 행 순서 변경"
+                >
+                  <GripVertical className="w-2.5 h-2.5" />
+                </div>
+              )}
+
               {/* 1. Key Column (PK / FK) */}
               <div className="w-[18px] shrink-0 flex items-center justify-center">
                 {col.isPk ? (
@@ -537,7 +661,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                       onUpdateColumn(table.id, col.id, { physicalName: val });
                     }
                   }}
-                  onEnterPress={() =>
+                  onInsertBelow={() =>
                     !isViewerMode && onAddColumn(table.id, undefined, index + 1)
                   }
                 />
@@ -596,7 +720,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                       });
                     }
                   }}
-                  onEnterPress={() =>
+                  onInsertBelow={() =>
                     !isViewerMode && onAddColumn(table.id, undefined, index + 1)
                   }
                 />
@@ -633,17 +757,31 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   onCommit={(val) =>
                     onUpdateColumn(table.id, col.id, { comment: val })
                   }
-                  onEnterPress={() =>
+                  onInsertBelow={() =>
                     !isViewerMode && onAddColumn(table.id, undefined, index + 1)
                   }
                 />
               </div>
 
+              {/* Insert Row Below on hover */}
+              {!isViewerMode && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAddColumn(table.id, undefined, index + 1);
+                  }}
+                  className="ml-1 opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-emerald-400 p-0.5 nodrag"
+                  title="아래에 행 추가 (Ctrl+Enter)"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                </button>
+              )}
+
               {/* Row Delete on hover */}
               {!isViewerMode && (
                 <button
                   onClick={() => onDeleteColumn(table.id, col.id)}
-                  className="ml-1 opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-rose-400 p-0.5 nodrag"
+                  className="opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-rose-400 p-0.5 nodrag"
                   title="컬럼 삭제"
                 >
                   <Trash2 className="w-2.5 h-2.5" />
