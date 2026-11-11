@@ -9,6 +9,7 @@ import {
   ColumnModel,
 } from '@/types/erd';
 import { restoreVersionSnapshotAction } from './versionActions';
+import { parseDataType } from '@/lib/dataType';
 
 export interface ImportParsedResult {
   tables: Record<string, TableModel>;
@@ -21,6 +22,38 @@ export interface ImportParsedResult {
   providedNodeIds: string[];
   /** AI JSON에서 컬럼을 이름으로 지정한 관계선 힌트 */
   relationshipColumnHints: Record<string, { parentColumn?: string; childColumn?: string }[]>;
+}
+
+/**
+ * 불러온 컬럼별로 JSON에 "명시적으로 들어있던" 속성 키 기록
+ * - 병합 시 키가 있으면 그 값으로 덮어쓰고, 없으면 기존 값을 유지하기 위함
+ * - 저장 데이터를 오염시키지 않도록 WeakMap에 별도 보관
+ */
+const explicitColumnKeys = new WeakMap<ColumnModel, Set<string>>();
+const explicitRelationshipKeys = new WeakMap<RelationshipModel, Set<string>>();
+
+const has = (obj: any, ...keys: string[]) =>
+  keys.some((k) => Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined);
+
+function toDataType(rawType: any) {
+  if (typeof rawType === 'string') return parseDataType(rawType);
+  if (rawType && rawType.name) {
+    // { name: "varchar(30)" } 처럼 괄호가 포함된 이름도 분해
+    return rawType.name.includes('(') && rawType.length === undefined && rawType.precision === undefined
+      ? parseDataType(rawType.name)
+      : rawType;
+  }
+  return { name: 'VARCHAR', length: 255 };
+}
+
+function readDefaultExpression(col: any): string | undefined {
+  const key = ['defaultExpression', 'default', 'defaultValue'].find((k) =>
+    Object.prototype.hasOwnProperty.call(col, k)
+  );
+  if (!key) return undefined;
+  const v = col[key];
+  if (v === null || v === undefined) return '';
+  return String(v).trim();
 }
 
 /**
@@ -38,39 +71,41 @@ function normalizeTable(rawTable: any, tableId: string): TableModel {
   if (Array.isArray(rawTable.columns)) {
     rawTable.columns.forEach((col: any, idx: number) => {
       const colId = col.id || `col_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`;
-      const colType =
-        typeof col.type === 'string'
-          ? { name: col.type }
-          : col.type && col.type.name
-          ? col.type
-          : { name: 'VARCHAR', length: 255 };
+      const colType = toDataType(col.type);
+      const nullable =
+        typeof col.nullable === 'boolean'
+          ? col.nullable
+          : typeof col.notNull === 'boolean'
+          ? !col.notNull
+          : true;
 
       columnsById[colId] = {
         id: colId,
         logicalName: col.logicalName || col.name || `컬럼_${idx + 1}`,
         physicalName: col.physicalName || col.name || `col_${idx + 1}`,
         type: colType,
-        nullable: col.nullable ?? true,
+        nullable,
         isPk: Boolean(col.isPk || col.pk),
         isFk: Boolean(col.isFk || col.fk),
         autoIncrement: Boolean(col.autoIncrement),
         domain: col.domain || '',
-        defaultExpression: col.defaultExpression || '',
+        // 키가 명시되어 있으면(null/'' 포함) 그 값을 그대로 사용 → 병합 시 기본값 삭제 가능
+        // 키 자체가 없으면 undefined → 병합 시 기존 값 유지
+        defaultExpression: readDefaultExpression(col),
         comment: col.comment || '',
         origin: col.origin || 'user',
       };
+      const keys = new Set<string>();
+      if (has(col, 'nullable', 'notNull')) keys.add('nullable');
+      if (has(col, 'autoIncrement')) keys.add('autoIncrement');
+      explicitColumnKeys.set(columnsById[colId], keys);
       columnOrder.push(colId);
     });
   }
   // If table already has columnsById & columnOrder
   else if (rawTable.columnsById && typeof rawTable.columnsById === 'object') {
     Object.entries(rawTable.columnsById).forEach(([cId, col]: [string, any]) => {
-      const colType =
-        typeof col.type === 'string'
-          ? { name: col.type }
-          : col.type && col.type.name
-          ? col.type
-          : { name: 'VARCHAR', length: 255 };
+      const colType = toDataType(col.type);
 
       columnsById[cId] = {
         ...col,
@@ -136,21 +171,54 @@ function normalizeRelationship(
     if (foundChild) childId = foundChild.id;
   }
 
-  return {
+  const relationshipType: RelationshipModel['relationshipType'] =
+    rawRel.relationshipType === 'identifying' ? 'identifying' : 'non-identifying';
+  const cardinality: RelationshipModel['cardinality'] =
+    rawRel.cardinality === 'one-to-one' || rawRel.cardinality === 'many-to-many'
+      ? rawRel.cardinality
+      : 'one-to-many';
+
+  const rel: RelationshipModel = {
     id: rawRel.id || relId,
     parentTableId: parentId || '',
     childTableId: childId || '',
     columnMappings: Array.isArray(rawRel.columnMappings)
       ? rawRel.columnMappings.filter((m: any) => m && m.parentColumnId && m.childColumnId)
       : [],
-    relationshipType: rawRel.relationshipType === 'identifying' ? 'identifying' : 'non-identifying',
-    cardinality: rawRel.cardinality || 'one-to-many',
+    relationshipType,
+    cardinality,
     sourceMultiplicity: rawRel.sourceMultiplicity || 'one',
-    targetMultiplicity: rawRel.targetMultiplicity || 'optional-many',
+    // 수동 생성(addRelationshipAction)과 동일한 기본 기호 규칙
+    targetMultiplicity:
+      rawRel.targetMultiplicity || defaultTargetMultiplicity(relationshipType, cardinality),
     onDelete: rawRel.onDelete || 'NO ACTION',
     onUpdate: rawRel.onUpdate || 'NO ACTION',
-    constraintName: rawRel.constraintName || `FK_${relId}`,
+    constraintName: rawRel.constraintName || undefined,
   };
+
+  explicitRelationshipKeys.set(
+    rel,
+    new Set(
+      [
+        'relationshipType',
+        'cardinality',
+        'sourceMultiplicity',
+        'targetMultiplicity',
+        'onDelete',
+        'onUpdate',
+        'constraintName',
+      ].filter((k) => has(rawRel, k))
+    )
+  );
+  return rel;
+}
+
+function defaultTargetMultiplicity(
+  relationshipType: RelationshipModel['relationshipType'],
+  cardinality: RelationshipModel['cardinality']
+): NonNullable<RelationshipModel['targetMultiplicity']> {
+  if (cardinality === 'one-to-one') return 'one';
+  return relationshipType === 'identifying' ? 'mandatory-many' : 'optional-many';
 }
 
 /**
@@ -397,6 +465,17 @@ function estimateTableHeight(table: TableModel): number {
   return 30 + (table.columnOrder?.length || 1) * 22 + 20;
 }
 
+/** 신규 컬럼은 undefined 대신 빈 문자열로 저장 */
+function withDefinedDefaults(col: ColumnModel): ColumnModel {
+  return col.defaultExpression === undefined ? { ...col, defaultExpression: '' } : col;
+}
+
+function finalizeNewTable(table: TableModel): TableModel {
+  const columnsById: Record<string, ColumnModel> = {};
+  Object.entries(table.columnsById).forEach(([id, c]) => (columnsById[id] = withDefinedDefaults(c)));
+  return { ...table, columnsById };
+}
+
 /** 기존 테이블 위에 불러온 테이블 내용을 덮어씀 (ID/위치/페이지/색상 유지) */
 function mergeTableContent(
   existing: TableModel,
@@ -414,22 +493,25 @@ function mergeTableContent(
     if (!inCol) return;
     const match = existingByName.get(norm(inCol.physicalName)) || existing.columnsById[inCol.id];
     if (match && !columnsById[match.id]) {
+      const explicit = explicitColumnKeys.get(inCol) || new Set<string>();
       columnsById[match.id] = {
         ...match,
         logicalName: inCol.logicalName || match.logicalName,
         physicalName: inCol.physicalName || match.physicalName,
         type: inCol.type,
-        nullable: inCol.nullable,
+        nullable: explicit.has('nullable') ? inCol.nullable : match.nullable,
         isPk: inCol.isPk,
-        isFk: Boolean(inCol.isFk || match.isFk),
-        autoIncrement: inCol.autoIncrement ?? match.autoIncrement,
-        defaultExpression: inCol.defaultExpression || match.defaultExpression,
+        // 관계선이 참조 중인 FK는 유지, 그 외에는 JSON 값을 따름
+        isFk: Boolean(inCol.isFk || (match.isFk && referencedColumnIds.has(match.id))),
+        autoIncrement: explicit.has('autoIncrement') ? inCol.autoIncrement : match.autoIncrement,
+        defaultExpression:
+          inCol.defaultExpression !== undefined ? inCol.defaultExpression : match.defaultExpression || '',
         comment: inCol.comment || match.comment,
         domain: inCol.domain || match.domain,
       };
       columnOrder.push(match.id);
     } else {
-      columnsById[inCol.id] = inCol;
+      columnsById[inCol.id] = withDefinedDefaults(inCol);
       columnOrder.push(inCol.id);
     }
   });
@@ -545,7 +627,7 @@ export function buildImportMergePlan(
       updatedTableNames.push(match.physicalName);
     } else {
       idMap[importId] = incoming.id;
-      finalTables[incoming.id] = { ...incoming, pageId: incoming.pageId || activePageId };
+      finalTables[incoming.id] = finalizeNewTable({ ...incoming, pageId: incoming.pageId || activePageId });
       newTableIds.push(incoming.id);
       newTableNames.push(incoming.physicalName);
     }
@@ -639,14 +721,30 @@ export function buildImportMergePlan(
     });
 
     const finalId = existingRel ? existingRel.id : relId;
+    let base: RelationshipModel;
+    if (existingRel) {
+      // 기존 관계선은 JSON에 명시된 속성만 덮어씀 (나머지 기호/참조동작 설정 유지)
+      const explicit = explicitRelationshipKeys.get(rel) || new Set<string>();
+      base = { ...existingRel };
+      explicit.forEach((k) => {
+        (base as any)[k] = (rel as any)[k];
+      });
+      if (
+        (explicit.has('relationshipType') || explicit.has('cardinality')) &&
+        !explicit.has('targetMultiplicity')
+      ) {
+        base.targetMultiplicity = defaultTargetMultiplicity(base.relationshipType, base.cardinality);
+      }
+    } else {
+      base = rel;
+    }
     finalRels[finalId] = {
-      ...(existingRel || {}),
-      ...rel,
+      ...base,
       id: finalId,
       parentTableId: parentId,
       childTableId: childId,
       columnMappings: mappings,
-      constraintName: existingRel?.constraintName || `FK_${child.physicalName}_${parent.physicalName}`,
+      constraintName: base.constraintName || `FK_${child.physicalName}_${parent.physicalName}`,
     };
     if (existingRel) updatedRelationshipCount++;
     else newRelationshipCount++;

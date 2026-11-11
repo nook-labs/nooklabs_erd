@@ -3,7 +3,8 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Handle, Position, NodeProps, useViewport } from '@xyflow/react';
 import { TableModel, ColumnModel, DisplayMode, DomainItem } from '@/types/erd';
-import { Key, Plus, Trash2, Palette, Check, GripVertical, Sparkles } from 'lucide-react';
+import { parseDataType, formatDataType } from '@/lib/dataType';
+import { Key, Plus, Trash2, Palette, Check, GripVertical, Sparkles, MessageSquareText } from 'lucide-react';
 
 // Helper to convert hex color to rgba for body tinting
 function hexToRgba(hex: string, alpha: number): string {
@@ -31,9 +32,16 @@ export interface TableNodeData {
   domains?: DomainItem[];
   zoomLabelScale?: number;
   showZoomLabels?: boolean;
+  showDefaultColumn?: boolean;
+  expandAllComments?: boolean;
   onUpdateTable: (tableId: string, updates: Partial<TableModel>) => void;
   onDeleteTable: (tableId: string) => void;
-  onAddColumn: (tableId: string, columnData?: Partial<ColumnModel>, insertIndex?: number) => void;
+  /** 생성된 컬럼 ID를 반환하면 해당 행 이름 칸이 바로 편집 상태가 됨 */
+  onAddColumn: (
+    tableId: string,
+    columnData?: Partial<ColumnModel>,
+    insertIndex?: number
+  ) => string | null | false | void;
   onUpdateColumn: (tableId: string, columnId: string, updates: Partial<ColumnModel>) => void;
   onDeleteColumn: (tableId: string, columnId: string) => void;
   onReorderColumns?: (tableId: string, newOrder: string[]) => void;
@@ -68,6 +76,8 @@ interface MiniInputProps {
   onCommit: (val: string) => void;
   /** Ctrl/Cmd + Enter: 현재 행 아래에 새 행 삽입 */
   onInsertBelow?: () => void;
+  /** 마운트 시 바로 편집 상태로 시작 (새로 추가된 행) */
+  autoEdit?: boolean;
 }
 
 const MiniInput: React.FC<MiniInputProps> = ({
@@ -80,8 +90,9 @@ const MiniInput: React.FC<MiniInputProps> = ({
   tooltipContent,
   onCommit,
   onInsertBelow,
+  autoEdit = false,
 }) => {
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(autoEdit && !readOnly);
   const [val, setVal] = useState(initialValue || '');
   const [isHovered, setIsHovered] = useState(false);
   const isComposingRef = useRef(false);
@@ -93,8 +104,14 @@ const MiniInput: React.FC<MiniInputProps> = ({
     setVal(initialValue || '');
   }, [initialValue]);
 
+  const isEditingRef = useRef(isEditing);
+  isEditingRef.current = isEditing;
+
   const finishEdit = useCallback(
     (commit: boolean) => {
+      // pointerdown/Enter/Esc 이후 blur가 한 번 더 들어와도 중복 처리하지 않음
+      if (!isEditingRef.current) return;
+      isEditingRef.current = false;
       setIsEditing(false);
       setIsHovered(false);
       if (commit) onCommit(valRef.current);
@@ -212,6 +229,9 @@ const MiniInput: React.FC<MiniInputProps> = ({
       value={val}
       placeholder={placeholder}
       title="Enter: 저장 · Ctrl+Enter: 아래에 행 추가 · Esc: 취소"
+      onFocus={(e) => {
+        if (autoEdit) e.currentTarget.select();
+      }}
       className={`bg-black/80 text-white outline-none border border-emerald-400/80 px-1 py-0 m-0 leading-tight rounded-none nodrag ${className}`}
       onChange={(e) => setVal(e.target.value)}
       onBlur={() => finishEdit(true)}
@@ -236,6 +256,8 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
     domains = [],
     zoomLabelScale = 1.0,
     showZoomLabels = true,
+    showDefaultColumn = true,
+    expandAllComments = false,
     onUpdateTable,
     onDeleteTable,
     onAddColumn,
@@ -250,6 +272,48 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
   const [dragColId, setDragColId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<number | null>(null); // 이 인덱스 "앞"에 삽입
   const [aiCopied, setAiCopied] = useState(false);
+
+  // 테이블 설명 패널
+  // 전역 "모두 펼치기" 값으로 시작하고, 전역 값이 바뀌면 개별 상태도 따라감
+  const [showComment, setShowComment] = useState(expandAllComments);
+  useEffect(() => {
+    setShowComment(expandAllComments);
+  }, [expandAllComments]);
+  const [isEditingComment, setIsEditingComment] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const commentEditorRef = useRef<HTMLTextAreaElement>(null);
+
+  const isEditingCommentRef = useRef(false);
+  isEditingCommentRef.current = isEditingComment;
+
+  const commitComment = useCallback(() => {
+    if (!isEditingCommentRef.current) return; // Esc 취소 후 blur 등 중복 처리 방지
+    isEditingCommentRef.current = false;
+    setIsEditingComment(false);
+    const next = commentEditorRef.current?.value ?? commentDraft;
+    if (next !== (table.comment || '')) {
+      onUpdateTable(table.id, { comment: next });
+    }
+  }, [commentDraft, table.comment, table.id, onUpdateTable]);
+
+  // 캔버스 클릭 시 blur가 안 생기는 경우 대비: 바깥 클릭 감지로 저장
+  useEffect(() => {
+    if (!isEditingComment) return;
+    const handle = (e: PointerEvent) => {
+      if (commentEditorRef.current && !commentEditorRef.current.contains(e.target as Node)) {
+        commitComment();
+      }
+    };
+    document.addEventListener('pointerdown', handle, true);
+    return () => document.removeEventListener('pointerdown', handle, true);
+  }, [isEditingComment, commitComment]);
+
+  // 새로 추가된 행은 이름 칸을 바로 편집 상태로
+  const [autoEditColId, setAutoEditColId] = useState<string | null>(null);
+  const addColumnAndEdit = (insertIndex?: number) => {
+    const newId = onAddColumn(table.id, undefined, insertIndex);
+    if (typeof newId === 'string') setAutoEditColId(newId);
+  };
 
   const handleRowDragOver = (e: React.DragEvent<HTMLDivElement>, index: number) => {
     if (!dragColId) return;
@@ -374,7 +438,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         backgroundImage: `linear-gradient(to bottom, ${bodyBgColor}, rgba(18, 19, 21, 0.95))`,
         borderColor: bodyBorderColor,
       }}
-      className={`min-w-[220px] max-w-[340px] w-max text-white rounded-[2px] border text-[11px] font-sans shadow-lg select-none relative transition-colors ${
+      className={`min-w-[220px] max-w-[460px] w-max text-white rounded-[2px] border text-[11px] font-sans shadow-lg select-none relative transition-colors ${
         isSelected
           ? 'ring-1 ring-emerald-400/80 shadow-2xl'
           : 'hover:border-opacity-90'
@@ -480,6 +544,26 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
           </span>
         )}
 
+        {/* Table Comment Toggle (설명이 있으면 항상 표시) */}
+        {!isZoomedOut && (table.comment || !isViewerMode) && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowComment((v) => !v);
+            }}
+            className={`ml-auto p-0.5 rounded hover:bg-black/30 nodrag shrink-0 transition-opacity ${
+              showComment
+                ? 'text-white opacity-100 bg-black/25'
+                : table.comment
+                ? 'text-white/75 hover:text-white opacity-100'
+                : 'text-white/60 hover:text-white opacity-0 group-hover/header:opacity-100'
+            }`}
+            title={table.comment ? `테이블 설명 ${showComment ? '접기' : '펼치기'}` : '테이블 설명 추가'}
+          >
+            <MessageSquareText className="w-2.5 h-2.5" />
+          </button>
+        )}
+
         {/* Minimal Actions on Hover */}
         {!isZoomedOut && (
           <div
@@ -520,7 +604,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onAddColumn(table.id);
+                addColumnAndEdit();
               }}
               className="p-0.5 hover:bg-black/30 rounded text-white/90 hover:text-white"
               title="컬럼 추가"
@@ -564,6 +648,50 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
         )}
       </div>
 
+      {/* Table Comment Panel */}
+      {showComment && !isZoomedOut && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="px-2 py-1.5 border-b border-white/10 bg-black/30 text-[10.5px] leading-snug nodrag cursor-default"
+        >
+          {isEditingComment && !isViewerMode ? (
+            <textarea
+              ref={commentEditorRef}
+              autoFocus
+              value={commentDraft}
+              onChange={(e) => setCommentDraft(e.target.value)}
+              onBlur={commitComment}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  isEditingCommentRef.current = false;
+                  setCommentDraft(table.comment || '');
+                  setIsEditingComment(false);
+                } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                  (e.target as HTMLTextAreaElement).blur();
+                }
+              }}
+              rows={Math.min(8, Math.max(2, Math.ceil((commentDraft.length || 1) / 40)))}
+              placeholder="테이블 설명 (Ctrl+Enter 저장, Esc 취소)"
+              className="w-full bg-[#111214] text-white text-[10.5px] px-1.5 py-1 outline-none rounded-[2px] border border-sky-400/80 resize-y nodrag nowheel font-sans"
+            />
+          ) : (
+            <div
+              onClick={() => {
+                if (isViewerMode) return;
+                setCommentDraft(table.comment || '');
+                setIsEditingComment(true);
+              }}
+              className={`whitespace-pre-wrap break-words max-h-[160px] overflow-y-auto nowheel ${
+                table.comment ? 'text-neutral-200' : 'text-neutral-500 italic'
+              } ${isViewerMode ? '' : 'cursor-text hover:bg-white/[0.04] rounded-[2px]'}`}
+              title={isViewerMode ? undefined : '클릭하여 설명 수정'}
+            >
+              {table.comment || '설명이 없습니다. 클릭하여 추가'}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ERDCloud Columns Body (Strict 3~4 Columns Layout) */}
       <div className="divide-y divide-white/[0.04]">
         {columns.map((col, index) => {
@@ -572,9 +700,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
               ? col.logicalName || col.physicalName
               : col.physicalName || col.logicalName;
 
-          const typeStr = col.type?.name
-            ? `${col.type.name.toLowerCase()}${col.type.length ? `(${col.type.length})` : ''}`
-            : 'varchar(255)';
+          const typeStr = formatDataType(col.type);
 
           return (
             <div
@@ -653,8 +779,11 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   initialValue={colName}
                   placeholder="컬럼명"
                   readOnly={isViewerMode}
+                  autoEdit={autoEditColId === col.id}
                   className="w-full text-white font-semibold text-[11px]"
                   onCommit={(val) => {
+                    if (autoEditColId === col.id) setAutoEditColId(null);
+                    if (val === colName) return;
                     if (displayMode === 'logical') {
                       onUpdateColumn(table.id, col.id, { logicalName: val });
                     } else {
@@ -662,7 +791,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                     }
                   }}
                   onInsertBelow={() =>
-                    !isViewerMode && onAddColumn(table.id, undefined, index + 1)
+                    !isViewerMode && addColumnAndEdit(index + 1)
                   }
                 />
               </div>
@@ -677,23 +806,17 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   className="w-full text-[#4ade80] font-mono text-[10px] text-right font-semibold"
                   onCommit={(val) => {
                     const trimmed = val.trim();
-                    if (!trimmed) return;
+                    // 값이 비었거나 바뀌지 않았으면 아무것도 하지 않음 (도메인/기본값 보존)
+                    if (!trimmed || trimmed.toLowerCase() === typeStr.toLowerCase()) return;
 
-                    // 1. Domain smart matching
+                    // 1. Domain matching (이름 정확히 일치할 때만 — 부분일치는 오적용 위험)
                     const matchedDomain = domains.find(
-                      (d) =>
-                        d.name.toLowerCase() === trimmed.toLowerCase() ||
-                        d.name.toLowerCase().includes(trimmed.toLowerCase()) ||
-                        trimmed.toLowerCase().includes(d.name.toLowerCase())
+                      (d) => d.name.trim().toLowerCase() === trimmed.toLowerCase()
                     );
 
-                    if (matchedDomain && trimmed.length > 1) {
-                      const dMatch = matchedDomain.dataType.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
+                    if (matchedDomain) {
                       onUpdateColumn(table.id, col.id, {
-                        type: {
-                          name: dMatch ? dMatch[1] : matchedDomain.dataType,
-                          length: dMatch && dMatch[2] ? parseInt(dMatch[2], 10) : undefined,
-                        },
+                        type: parseDataType(matchedDomain.dataType),
                         defaultExpression: matchedDomain.defaultValue || col.defaultExpression,
                         domain: matchedDomain.name,
                         domainId: matchedDomain.id,
@@ -701,27 +824,15 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                       return;
                     }
 
-                    // 2. Standard SQL type parse
-                    const match = trimmed.match(/^([a-zA-Z0-9_\[\]]+)(?:\((\d+)\))?/);
-                    if (match) {
-                      onUpdateColumn(table.id, col.id, {
-                        type: {
-                          name: match[1],
-                          length: match[2] ? parseInt(match[2], 10) : undefined,
-                        },
-                        domain: undefined,
-                        domainId: undefined,
-                      });
-                    } else {
-                      onUpdateColumn(table.id, col.id, {
-                        type: { name: trimmed },
-                        domain: undefined,
-                        domainId: undefined,
-                      });
-                    }
+                    // 2. Standard SQL type parse ("decimal(18,2)" 정밀도/스케일 포함)
+                    onUpdateColumn(table.id, col.id, {
+                      type: parseDataType(trimmed),
+                      domain: undefined,
+                      domainId: undefined,
+                    });
                   }}
                   onInsertBelow={() =>
-                    !isViewerMode && onAddColumn(table.id, undefined, index + 1)
+                    !isViewerMode && addColumnAndEdit(index + 1)
                   }
                 />
               </div>
@@ -745,6 +856,28 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                 </button>
               </div>
 
+              {/* 4-1. Default Value (기본값) */}
+              {showDefaultColumn && (
+              <div className="w-[72px] shrink-0 pl-1.5 relative">
+                <MiniInput
+                  initialValue={col.defaultExpression || ''}
+                  placeholder="기본값"
+                  readOnly={isViewerMode}
+                  tooltipContent={col.defaultExpression ? `기본값: ${colName}` : undefined}
+                  className="w-full text-amber-200/80 placeholder:text-neutral-600/70 font-mono text-[9.5px] truncate"
+                  onCommit={(val) => {
+                    const next = val.trim();
+                    if (next !== (col.defaultExpression || '')) {
+                      onUpdateColumn(table.id, col.id, { defaultExpression: next });
+                    }
+                  }}
+                  onInsertBelow={() =>
+                    !isViewerMode && addColumnAndEdit(index + 1)
+                  }
+                />
+              </div>
+              )}
+
               {/* 5. Comment (설명 - 긴 텍스트 호버 툴팁 + 플로팅 확장 인풋) */}
               <div className="w-[75px] shrink-0 pl-1.5 relative">
                 <MiniInput
@@ -754,11 +887,13 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                   expandOnEdit={true}
                   tooltipContent={col.comment ? `설명: ${colName}` : undefined}
                   className="w-full text-neutral-300 placeholder:text-neutral-600/70 text-[9.5px] truncate"
-                  onCommit={(val) =>
-                    onUpdateColumn(table.id, col.id, { comment: val })
-                  }
+                  onCommit={(val) => {
+                    if (val !== (col.comment || '')) {
+                      onUpdateColumn(table.id, col.id, { comment: val });
+                    }
+                  }}
                   onInsertBelow={() =>
-                    !isViewerMode && onAddColumn(table.id, undefined, index + 1)
+                    !isViewerMode && addColumnAndEdit(index + 1)
                   }
                 />
               </div>
@@ -768,7 +903,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onAddColumn(table.id, undefined, index + 1);
+                    addColumnAndEdit(index + 1);
                   }}
                   className="ml-1 opacity-0 group-hover/row:opacity-60 hover:!opacity-100 text-emerald-400 p-0.5 nodrag"
                   title="아래에 행 추가 (Ctrl+Enter)"
@@ -795,7 +930,7 @@ const TableNodeComponent: React.FC<NodeProps> = ({ data, selected }) => {
       {/* Minimal Add Column on hover */}
       {!isViewerMode && (
         <button
-          onClick={() => onAddColumn(table.id)}
+          onClick={() => addColumnAndEdit()}
           className="w-full py-0.5 bg-[#141414] hover:bg-[#202020] text-neutral-500 hover:text-emerald-400 text-[9.5px] flex items-center justify-center gap-1 border-t border-white/[0.04] transition-colors nodrag opacity-0 hover:opacity-100 focus:opacity-100"
           title="컬럼 추가 (Enter)"
         >

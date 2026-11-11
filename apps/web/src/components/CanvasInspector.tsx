@@ -26,7 +26,40 @@ export interface CanvasSettings {
   showZoomLabels?: boolean; // 기본값 true
   relationDisplayMode?: RelationDisplayMode; // 기본값 'all' ('all' | 'focused' | 'hidden')
   dimUnfocused?: boolean; // 비포커스 노드 흐림 처리
+  showDefaultColumn?: boolean; // 테이블 행에 기본값 칸 표시 (기본값 true)
+  expandAllTableComments?: boolean; // 모든 테이블 설명 패널 펼치기 (기본값 false)
 }
+
+const ToggleRow: React.FC<{
+  label: string;
+  description: string;
+  checked: boolean;
+  onChange: (next: boolean) => void;
+}> = ({ label, description, checked, onChange }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={() => onChange(!checked)}
+    className="w-full flex items-center justify-between gap-3 px-2.5 py-2 rounded-lg bg-[#181818] border border-white/[0.08] hover:border-white/20 transition-colors text-left"
+  >
+    <div className="min-w-0">
+      <div className="text-[11px] text-neutral-200 font-medium">{label}</div>
+      <div className="text-[10px] text-neutral-500 leading-snug">{description}</div>
+    </div>
+    <span
+      className={`relative shrink-0 w-7 h-4 rounded-full transition-colors ${
+        checked ? 'bg-emerald-500' : 'bg-neutral-600'
+      }`}
+    >
+      <span
+        className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-all ${
+          checked ? 'left-[14px]' : 'left-0.5'
+        }`}
+      />
+    </span>
+  </button>
+);
 
 
 export const CANVAS_BG_PRESETS = [
@@ -318,6 +351,27 @@ export const CanvasInspector: React.FC<CanvasInspectorProps> = ({
                   <span>👁️ 숨김</span>
                 </button>
               </div>
+            </div>
+
+            <div className="h-[1px] bg-white/[0.08]" />
+
+            {/* 3.6 Table Display Options */}
+            <div className="space-y-2">
+              <span className="font-bold text-neutral-300 text-[11px] uppercase tracking-wider block">
+                테이블 표시 (Table)
+              </span>
+              <ToggleRow
+                label="기본값 칸 표시"
+                description="컬럼 행에 DEFAULT 값 칸을 보여줍니다"
+                checked={settings.showDefaultColumn ?? true}
+                onChange={(next) => onUpdateSettings({ showDefaultColumn: next })}
+              />
+              <ToggleRow
+                label="테이블 설명 모두 펼치기"
+                description="모든 테이블 헤더 아래에 설명 패널을 펼칩니다 (개별 💬 버튼으로 다시 접기 가능)"
+                checked={settings.expandAllTableComments ?? false}
+                onChange={(next) => onUpdateSettings({ expandAllTableComments: next })}
+              />
             </div>
 
             <div className="h-[1px] bg-white/[0.08]" />

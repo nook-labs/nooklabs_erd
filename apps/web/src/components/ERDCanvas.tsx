@@ -329,6 +329,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
             domains,
             zoomLabelScale: canvasSettings.zoomLabelScale ?? 1.45,
             showZoomLabels: canvasSettings.showZoomLabels ?? true,
+            showDefaultColumn: canvasSettings.showDefaultColumn ?? true,
+            expandAllComments: canvasSettings.expandAllTableComments ?? false,
             isSourceCandidate,
             isTargetCandidate,
             isViewerMode,
@@ -366,8 +368,24 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
                 projectTitle: manager.metaMap.get('title'),
               });
               try {
-                await navigator.clipboard.writeText(script);
-                return true;
+                if (navigator.clipboard && window.isSecureContext) {
+                  await navigator.clipboard.writeText(script);
+                  return true;
+                }
+              } catch {
+                // 아래 폴백으로 진행
+              }
+              // http(LAN IP 접속 등) 환경 폴백
+              try {
+                const ta = document.createElement('textarea');
+                ta.value = script;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                return ok;
               } catch {
                 return false;
               }
@@ -471,6 +489,8 @@ export const ERDCanvas: React.FC<ERDCanvasProps> = ({
     isViewerMode,
     canvasSettings.zoomLabelScale,
     canvasSettings.showZoomLabels,
+    canvasSettings.showDefaultColumn,
+    canvasSettings.expandAllTableComments,
     focusedDiagramId,
     domains,
     onOpenDiagramEditor,
