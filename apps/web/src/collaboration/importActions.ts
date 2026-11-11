@@ -31,6 +31,8 @@ export interface ImportParsedResult {
  */
 const explicitColumnKeys = new WeakMap<ColumnModel, Set<string>>();
 const explicitRelationshipKeys = new WeakMap<RelationshipModel, Set<string>>();
+/** logicalName 없이 들어온 테이블 (병합 시 기존 논리명 유지) */
+const explicitTableMissingLogicalName = new WeakSet<TableModel>();
 
 const has = (obj: any, ...keys: string[]) =>
   keys.some((k) => Object.prototype.hasOwnProperty.call(obj, k) && obj[k] !== undefined);
@@ -97,6 +99,7 @@ function normalizeTable(rawTable: any, tableId: string): TableModel {
       };
       const keys = new Set<string>();
       if (has(col, 'nullable', 'notNull')) keys.add('nullable');
+      if (col.logicalName) keys.add('logicalName');
       if (has(col, 'autoIncrement')) keys.add('autoIncrement');
       explicitColumnKeys.set(columnsById[colId], keys);
       columnOrder.push(colId);
@@ -112,6 +115,11 @@ function normalizeTable(rawTable: any, tableId: string): TableModel {
         id: cId,
         type: colType,
       };
+      const keys = new Set<string>();
+      if (has(col, 'nullable')) keys.add('nullable');
+      if (has(col, 'autoIncrement')) keys.add('autoIncrement');
+      if (col.logicalName) keys.add('logicalName');
+      explicitColumnKeys.set(columnsById[cId], keys);
     });
 
     if (Array.isArray(rawTable.columnOrder) && rawTable.columnOrder.length > 0) {
@@ -128,7 +136,7 @@ function normalizeTable(rawTable: any, tableId: string): TableModel {
     primaryKeyId = foundPk ? foundPk.id : columnOrder[0];
   }
 
-  return {
+  const table: TableModel = {
     id: normalizedId,
     schemaName: rawTable.schemaName || 'public',
     logicalName,
@@ -141,6 +149,8 @@ function normalizeTable(rawTable: any, tableId: string): TableModel {
     indexIds: rawTable.indexIds || [],
     constraintIds: rawTable.constraintIds || [],
   };
+  if (!rawTable.logicalName) explicitTableMissingLogicalName.add(table);
+  return table;
 }
 
 /**
@@ -496,7 +506,8 @@ function mergeTableContent(
       const explicit = explicitColumnKeys.get(inCol) || new Set<string>();
       columnsById[match.id] = {
         ...match,
-        logicalName: inCol.logicalName || match.logicalName,
+        // logicalName 생략 시 자동 생성 이름(컬럼_N)으로 덮어쓰지 않도록 기존 값 유지
+        logicalName: explicit.has('logicalName') ? inCol.logicalName : match.logicalName,
         physicalName: inCol.physicalName || match.physicalName,
         type: inCol.type,
         nullable: explicit.has('nullable') ? inCol.nullable : match.nullable,
@@ -528,7 +539,9 @@ function mergeTableContent(
 
   return {
     ...existing,
-    logicalName: incoming.logicalName || existing.logicalName,
+    logicalName: explicitTableMissingLogicalName.has(incoming)
+      ? existing.logicalName
+      : incoming.logicalName || existing.logicalName,
     physicalName: incoming.physicalName || existing.physicalName,
     comment: incoming.comment || existing.comment,
     headerColor: incoming.headerColor || existing.headerColor,
